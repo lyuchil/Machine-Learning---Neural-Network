@@ -1,8 +1,6 @@
 import chess.pgn
 import csv
 
-# result list
-list = []
 
 # def create_something(node, board_fen):
 
@@ -19,8 +17,10 @@ list = []
 
 #     return dict
 
+# result list
+all_games = []
 
-data = open("C:/Users/Yu-Chi/Downloads/lichess_db_standard_rated_2024-02.pgn", encoding='utf-8')
+data = open("./lichess_db_standard_rated_2018-06.pgn", encoding='utf-8')
 
 val = 0
 
@@ -29,7 +29,7 @@ game_count = 0
 # the outer while loop for val <= is for testing purpose to limit the amount it runs just to see if it works
 # for actual parsing purpose, this should just be a while true loop
 while val <= 10:
-    # iterating throug all the games in the file
+    # iterating through all the games in the file
     # break when there are no more games
     game = chess.pgn.read_game(data)
     if game is None:
@@ -43,42 +43,53 @@ while val <= 10:
     # this condition can be changed depending the elo range we want to parse and other conditions
     if game.headers['TimeControl'] == "300+0" and game.headers['Termination'] == "Normal" and average_elo >= 1100 and average_elo <= 1200:
 
-
-        information = {
-            "Game#" : game_count,
+        game_data = {
+            "game_number" : game_count,
+            "time_control": game.headers['TimeControl'],
             "moves" : []
         }
 
         # setting the current game as the root node
         node = game
+
+        # The library gives the move *leading* to the current position, rather than the 
+        # move *played* in the current position, so we need some extra logic
+        prev_dict = None # For storing current moves
+        prev_move = None # For storing previous moves
     
         # iterate through each node for every possible move
         while node is not None:
-            board = node.board()
-            board_fen = board.board_fen()
 
             # if the comment is none, likely the start of the game
             if not node.comment:
-                clk = '[%clk 0:05:00]'
+                clk = '[%clk 0:05:00]' # TODO change to be variable based on time control
             else:
                 clk = node.comment
 
-
-            temp_dict = {
+            current_move_data = {
                 "clk" : clk,
-                "board_fen" : board_fen
+                "board_fen" : node.board().board_fen(), # Board state
+                "player_to_move" : node.turn(),         # True is white, False is black
+                "move" : None,                          # Assigned later when looking at the next position
+                "opponent_prev_move" : str(node.move),  # The move *leading* to the current position (opponent's move)
+                "player_prev_move" : str(prev_move)     # The move before that, (player's last move)
             }
+
+            if(prev_dict):
+                prev_dict["move"] = str(node.move)
            
             #temp_dict = create_something(node, board_fen)
             #list.append(temp_dict)
 
             # appending every move to the list
-            information['moves'].append(temp_dict)
+            game_data['moves'].append(current_move_data)
 
             # iterate to the next node
+            prev_dict = current_move_data
+            prev_move = node.move
             node = node.next()
 
-        list.append(information)
+        all_games.append(game_data)
         val += 1   
         game_count += 1
     else:
@@ -88,7 +99,7 @@ while val <= 10:
 # write to csv file using the given file name
 csv_path = "output.csv"
 
-fields = list[0].keys()
+fields = all_games[0].keys()
 
 with open(csv_path, mode='w', newline='') as file:
     writer = csv.DictWriter(file, fieldnames=fields)
@@ -97,7 +108,7 @@ with open(csv_path, mode='w', newline='') as file:
     writer.writeheader()
     
     # Write rows
-    for row in list:
+    for row in all_games:
         writer.writerow(row)
 
 print("CSV file written successfully.")
