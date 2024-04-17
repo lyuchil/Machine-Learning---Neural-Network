@@ -1,5 +1,53 @@
 import chess.pgn
-import csv
+import numpy as np
+
+"""
+Tensor layers:
+0 - current pawns
+1 - current knights
+2 - crruent bishops
+3 - current rooks
+4 - current queen
+5 - current king
+6 - from pawns
+7 - from knights
+8 - from bishops
+9 - from rooks
+10 - from  queen
+11 - from king
+12 - to pawns
+13 - to knights
+14 - to bishops
+15 - to rooks
+16 - to queen
+17 - to king
+"""
+
+# tensor layers: 0-, 1, 2, 3, 4
+#
+class board_tensor:
+    def __init__(self, board):
+        self.board = board
+        self.tensor = self.create_tensor()
+
+
+
+    def create_tensor():
+        all_moves = chess.SQUARES
+        tensor = np.zeros((8,8,18))
+        for move in all_moves:
+            piece = self.board.piece_at(move)
+            if piece:
+                piece_layer = piece.piece_type - 1
+                piece_color = piece.color  
+                row = move // 8
+                col = move % 8
+                tensor[row, col, piece_layer] = piece_color
+                
+
+
+
+                
 
 
 # def create_something(node, board_fen):
@@ -20,7 +68,7 @@ import csv
 # result list
 all_games = []
 
-data = open("./lichess_db_standard_rated_2018-06.pgn", encoding='utf-8')
+data = open("./rawGames/lcdb_2013-07.pgn", encoding='utf-8')
 
 val = 0
 
@@ -41,7 +89,7 @@ while val <= 10:
     average_elo = (int(b_elo) + int(w_elo)) / 2
     
     # this condition can be changed depending the elo range we want to parse and other conditions
-    if game.headers['TimeControl'] == "300+0" and game.headers['Termination'] == "Normal" and average_elo >= 1100 and average_elo <= 1200:
+    if game.headers['TimeControl'] == "300+0" and game.headers['Termination'] == "Normal" and average_elo >= 2000:
 
         game_data = {
             "game_number" : game_count,
@@ -51,6 +99,8 @@ while val <= 10:
 
         # setting the current game as the root node
         node = game
+
+        #print(node.board().piece_at(0))
 
         # The library gives the move *leading* to the current position, rather than the 
         # move *played* in the current position, so we need some extra logic
@@ -65,6 +115,9 @@ while val <= 10:
                 clk = '[%clk 0:05:00]' # TODO change to be variable based on time control
             else:
                 clk = node.comment
+
+            board_tensor = 
+
 
             current_move_data = {
                 "clk" : clk,
