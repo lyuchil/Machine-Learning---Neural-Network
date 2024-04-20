@@ -26,30 +26,90 @@ Tensor layers:
 # tensor layers: 0-, 1, 2, 3, 4
 #
 class board_tensor:
-    def __init__(self, board):
+    def __init__(self, board, previous_move, previous_move_piece, previous2_move, previous2_move_piece):
         self.board = board
+        self.prevM = previous_move
+        self.prev2M = previous2_move
+        self.prevM_piece = previous_move_piece
+        self.prev2M_piece = previous2_move_piece
         self.tensor = self.create_tensor()
+        
 
 
+    def create_tensor(self):
+        from_2 = None
+        to_2 = None
 
-    def create_tensor():
+        from_p = None
+        to_p = None
+    
+        # TODO fix none type issues and handle it properly
+        prev2_to_piece_type = self.prev2M_piece.piece_type
+        prevM_to_piece = self.prevM_piece.piece_type
+
+
         all_moves = chess.SQUARES
         tensor = np.zeros((8,8,18))
         for move in all_moves:
             piece = self.board.piece_at(move)
             if piece:
                 piece_layer = piece.piece_type - 1
-                piece_color = piece.color  
+                if piece.color:
+                    piece_color = 1
+                else:
+                    piece_color = -1
                 row = move // 8
                 col = move % 8
                 tensor[row, col, piece_layer] = piece_color
+        
+        if self.prev2M:
+            from_2 = self.prev2M.from_square
+            to_2 = self.prev2M.to_square
+            if self.prev2M.promotion:
+                prev2_to_piece_type = self.prev2M.promotion
+            
+            from_row = from_2 // 8
+            from_col = from_2 % 8
+            tensor[from_row, from_col, self.prev2M_piece.piece_type - 1 + 6]
+            
+            to_row = to_2 // 8
+            to_col = to_2 % 8
+            tensor[to_row, to_col, prev2_to_piece_type - 1 + 6]
+            
+
+
+        if self.prevM:
+            from_p = self.prevM.from_square
+            to_p = self.prevM.to_square
+            if self.prevM.promotion:
+                prevM_to_piece = self.prevM.promotion
+
+
+            from_row = from_p // 8
+            from_col = from_p % 8
+            tensor[from_row, from_col, self.prevM_piece.piece_type - 1 + 6]
+            
+            to_row = to_p // 8
+            to_col = to_p % 8
+            tensor[to_row, to_col, prevM_to_piece - 1 + 6]
+    
+
+    def to_string(self):
+        tensor = self.tensor
+        if tensor:
+            for i in range(tensor.shape[2]):
+                print(f"Layer {i}")
+                print(tensor[:, :, i])
+                print('')
+
+
+
+
+
+
+
+
                 
-
-
-
-                
-
-
 # def create_something(node, board_fen):
 
 #     if not node.comment:
@@ -68,7 +128,7 @@ class board_tensor:
 # result list
 all_games = []
 
-data = open("./rawGames/lcdb_2013-07.pgn", encoding='utf-8')
+data = open("./rawGames/lcdb_2017-03.pgn", encoding='utf-8')
 
 val = 0
 
@@ -104,8 +164,12 @@ while val <= 10:
 
         # The library gives the move *leading* to the current position, rather than the 
         # move *played* in the current position, so we need some extra logic
-        prev_dict = None # For storing current moves
-        prev_move = None # For storing previous moves
+        #prev_dict = None # For storing current moves
+        prev_move = None  # For storing previous moves
+        prev_move_piece = None
+        prev2_move = None # For storing previous 2 moves
+        prev2_move_piece = None
+
     
         # iterate through each node for every possible move
         while node is not None:
@@ -116,33 +180,43 @@ while val <= 10:
             else:
                 clk = node.comment
 
-            board_tensor = 
+            tensor = board_tensor(node.board(), prev_move, prev_move_piece, prev2_move, prev2_move_piece)
+            print(tensor.to_string())
+           
+            prev2_move = prev_move
+            prev2_move_piece = prev_move_piece
+            prev_move = node.move
+            if node.move:
+                prev_move_piece = node.board().piece_at(node.move.to_square)
+            
+            node = node.next()
 
+        
 
-            current_move_data = {
-                "clk" : clk,
-                "board_fen" : node.board().board_fen(), # Board state
-                "player_to_move" : node.turn(),         # True is white, False is black
-                "move" : None,                          # Assigned later when looking at the next position
-                "opponent_prev_move" : str(node.move),  # The move *leading* to the current position (opponent's move)
-                "player_prev_move" : str(prev_move)     # The move before that, (player's last move)
-            }
+            # current_move_data = {
+            #     "clk" : clk,
+            #     "board_fen" : node.board().board_fen(), # Board state
+            #     "player_to_move" : node.turn(),         # True is white, False is black
+            #     "move" : None,                          # Assigned later when looking at the next position
+            #     "opponent_prev_move" : str(node.move),  # The move *leading* to the current position (opponent's move)
+            #     "player_prev_move" : str(prev_move)     # The move before that, (player's last move)
+            # }
 
-            if(prev_dict):
-                prev_dict["move"] = str(node.move)
+            # if(prev_dict):
+            #     prev_dict["move"] = str(node.move)
            
             #temp_dict = create_something(node, board_fen)
             #list.append(temp_dict)
 
             # appending every move to the list
-            game_data['moves'].append(current_move_data)
+            # game_data['moves'].append(current_move_data)
 
-            # iterate to the next node
-            prev_dict = current_move_data
-            prev_move = node.move
-            node = node.next()
+            # # iterate to the next node
+            # prev_dict = current_move_data
+            # prev_move = node.move
+            
 
-        all_games.append(game_data)
+        #all_games.append(game_data)
         val += 1   
         game_count += 1
     else:
@@ -150,21 +224,21 @@ while val <= 10:
 
 
 # write to csv file using the given file name
-csv_path = "output.csv"
+# csv_path = "output.csv"
 
-fields = all_games[0].keys()
+# fields = all_games[0].keys()
 
-with open(csv_path, mode='w', newline='') as file:
-    writer = csv.DictWriter(file, fieldnames=fields)
+# with open(csv_path, mode='w', newline='') as file:
+#     writer = csv.DictWriter(file, fieldnames=fields)
     
-    # Write header
-    writer.writeheader()
+#     # Write header
+#     writer.writeheader()
     
-    # Write rows
-    for row in all_games:
-        writer.writerow(row)
+#     # Write rows
+#     for row in all_games:
+#         writer.writerow(row)
 
-print("CSV file written successfully.")
+# print("CSV file written successfully.")
 
 
 
