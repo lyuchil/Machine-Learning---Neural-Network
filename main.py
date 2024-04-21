@@ -100,7 +100,7 @@ class board_tensor:
               
 all_games = []
 
-data = open("./rawGames/lcdb_2017-03.pgn", encoding='utf-8')
+data = open(f"./rawGames/lcdb_{sys.argv[1]}-{sys.argv[2]}.pgn", encoding='utf-8')
 
 val = 0
 
@@ -137,7 +137,7 @@ while val <= 10:
 
         # The library gives the move *leading* to the current position, rather than the 
         # move *played* in the current position, so we need some extra logic
-        #prev_dict = None # For storing current moves
+        prev_dict = None # For storing current moves
         prev_move = None  # For storing previous moves
         prev_move_piece = None
         prev2_move = None # For storing previous 2 moves
@@ -148,7 +148,7 @@ while val <= 10:
         # iterate through each node for every possible move
         while node is not None:
             # node.move is the move that lead up to this current position AKA the previous move
-            print("node.move " + str(node.move))
+            #print("node.move " + str(node.move))
             prev2_move = prev_move
             prev2_move_piece = prev_move_piece
             prev_move = node.move
@@ -156,48 +156,43 @@ while val <= 10:
                 prev_move_piece = node.board().piece_at(node.move.to_square)
 
             tensor = board_tensor(node.board(), prev_move, prev_move_piece, prev2_move, prev2_move_piece)
-            tensor.printTensor()
+            #tensor.printTensor()
         
             # if the comment is none, likely the start of the game
             if not node.comment:
-                clk = '[%clk 0:05:00]' # TODO change to be variable based on time control
+                clk = '[%clk 0:05:00]' # TODO change to be variable based on time control, verify data set timing that has %clk
+                                    
             else:
                 clk = node.comment
 
+            #print(node.comment)
+
             # form data here
+            current_move_data = {
+                "clk" : clk,
+                "player_to_move" : int(node.turn()),         # True is white, False is black
+                "move" : None,                          # Assigned later when looking at the next position
+                "tensor" : np.array2string((tensor.tensor), separator=',')     
+            }
 
-            node = node.next()
-            iterator += 1
-            if iterator == 3:
-                exit()
-
-
-
-
-            # current_move_data = {
-            #     "clk" : clk,
-            #     "board_fen" : node.board().board_fen(), # Board state
-            #     "player_to_move" : node.turn(),         # True is white, False is black
-            #     "move" : None,                          # Assigned later when looking at the next position
-            #     "opponent_prev_move" : str(node.move),  # The move *leading* to the current position (opponent's move)
-            #     "player_prev_move" : str(prev_move)     # The move before that, (player's last move)
-            # }
-
-            # if(prev_dict):
-            #     prev_dict["move"] = str(node.move)
+        
+            if(prev_dict):
+                prev_dict["move"] = str(node.move)
            
             #temp_dict = create_something(node, board_fen)
             #list.append(temp_dict)
 
             # appending every move to the list
-            # game_data['moves'].append(current_move_data)
+            game_data['moves'].append(current_move_data)
 
             # # iterate to the next node
-            # prev_dict = current_move_data
+            prev_dict = current_move_data
             # prev_move = node.move
+
+            node = node.next()
             
 
-        #all_games.append(game_data)
+        all_games.append(game_data)
         val += 1   
         game_count += 1
     else:
@@ -206,7 +201,7 @@ while val <= 10:
 
 # write to csv file using the given file name
 # parsed_data_YYYY-MM.csv
-csv_path = f"parsed_data_{sys.argv[1]}-{sys.argv[2]}.csv"
+csv_path = f"./parsed/parsed_data_{sys.argv[1]}-{sys.argv[2]}.csv"
 
 fields = all_games[0].keys()
 

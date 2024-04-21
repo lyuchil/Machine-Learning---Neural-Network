@@ -1,0 +1,2 @@
+This folder is for the parsed games. 
+Popualte this folder using python main.py [YYYY] [MM] 
