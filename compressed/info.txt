@@ -1,1 +1,2 @@
 This folder is for all of the compressed pgn files downloaded directly from the lichess database
+Populate this folder by running ./runDownlaod [YYYY] [MM]

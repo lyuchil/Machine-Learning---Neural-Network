@@ -1,1 +1,2 @@
 This folder is for all of the uncompressed pgn files. They need to be parsed into a csv before being used
+Populate this folder by running ./runDownlaod [YYYY] [MM]

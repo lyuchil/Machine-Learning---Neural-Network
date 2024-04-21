@@ -1,11 +1,13 @@
 import chess.pgn
 import numpy as np
+import sys
+import csv
 
 """
 Tensor layers:
 0 - current pawns
 1 - current knights
-2 - crruent bishops
+2 - current bishops
 3 - current rooks
 4 - current queen
 5 - current king
@@ -13,7 +15,7 @@ Tensor layers:
 7 - from knights
 8 - from bishops
 9 - from rooks
-10 - from  queen
+10 - from queen
 11 - from king
 12 - to pawns
 13 - to knights
@@ -23,8 +25,6 @@ Tensor layers:
 17 - to king
 """
 
-# tensor layers: 0-, 1, 2, 3, 4
-#
 class board_tensor:
     def __init__(self, board, previous_move, previous_move_piece, previous2_move, previous2_move_piece):
         self.board = board
@@ -32,25 +32,12 @@ class board_tensor:
         self.prev2M = previous2_move
         self.prevM_piece = previous_move_piece
         self.prev2M_piece = previous2_move_piece
-        self.tensor = self.create_tensor()
+        self.create_tensor()
         
-
-
     def create_tensor(self):
-        from_2 = None
-        to_2 = None
-
-        from_p = None
-        to_p = None
-    
-        # TODO fix none type issues and handle it properly
-        prev2_to_piece_type = self.prev2M_piece.piece_type
-        prevM_to_piece = self.prevM_piece.piece_type
-
-
-        all_moves = chess.SQUARES
-        tensor = np.zeros((8,8,18))
-        for move in all_moves:
+        
+        self.tensor = np.zeros((8,8,18))
+        for move in chess.SQUARES:
             piece = self.board.piece_at(move)
             if piece:
                 piece_layer = piece.piece_type - 1
@@ -60,72 +47,57 @@ class board_tensor:
                     piece_color = -1
                 row = move // 8
                 col = move % 8
-                tensor[row, col, piece_layer] = piece_color
+                self.tensor[row, col, piece_layer] = piece_color
+
         
         if self.prev2M:
+
             from_2 = self.prev2M.from_square
             to_2 = self.prev2M.to_square
+
+            p2_color = 1 if self.prev2M_piece.color else -1
+
             if self.prev2M.promotion:
                 prev2_to_piece_type = self.prev2M.promotion
+            else:
+                prev2_to_piece_type = self.prev2M_piece.piece_type
             
             from_row = from_2 // 8
             from_col = from_2 % 8
-            tensor[from_row, from_col, self.prev2M_piece.piece_type - 1 + 6]
+            self.tensor[from_row, from_col, self.prev2M_piece.piece_type - 1 + 6] = p2_color
             
             to_row = to_2 // 8
             to_col = to_2 % 8
-            tensor[to_row, to_col, prev2_to_piece_type - 1 + 6]
+            self.tensor[to_row, to_col, prev2_to_piece_type - 1 + 12] = p2_color
             
-
 
         if self.prevM:
             from_p = self.prevM.from_square
             to_p = self.prevM.to_square
+
+            p_color = 1 if self.prevM_piece.color else -1
+
             if self.prevM.promotion:
                 prevM_to_piece = self.prevM.promotion
-
+            else:
+                prevM_to_piece = self.prevM_piece.piece_type
 
             from_row = from_p // 8
             from_col = from_p % 8
-            tensor[from_row, from_col, self.prevM_piece.piece_type - 1 + 6]
+            self.tensor[from_row, from_col, self.prevM_piece.piece_type - 1 + 6] = p_color
             
             to_row = to_p // 8
             to_col = to_p % 8
-            tensor[to_row, to_col, prevM_to_piece - 1 + 6]
+            self.tensor[to_row, to_col, prevM_to_piece - 1 + 12] = p_color
     
 
-    def to_string(self):
-        tensor = self.tensor
-        if tensor:
-            for i in range(tensor.shape[2]):
-                print(f"Layer {i}")
-                print(tensor[:, :, i])
-                print('')
+    def printTensor(self):
+        for i in range(self.tensor.shape[2]):
+            print(f"Layer {i}")
+            print(self.tensor[:, :, i])
+            print('')
 
-
-
-
-
-
-
-
-                
-# def create_something(node, board_fen):
-
-#     if not node.comment:
-#         clk = '[%clk 0:05:00]'
-#     else:
-#         clk = node.comment
-
-
-#     dict = {
-#         "clk" : clk,
-#         "board_fen" : board_fen
-#     }
-
-#     return dict
-
-# result list
+              
 all_games = []
 
 data = open("./rawGames/lcdb_2017-03.pgn", encoding='utf-8')
@@ -140,6 +112,7 @@ while val <= 10:
     # iterating through all the games in the file
     # break when there are no more games
     game = chess.pgn.read_game(data)
+    # print(game.headers)
     if game is None:
         break
 
@@ -169,29 +142,37 @@ while val <= 10:
         prev_move_piece = None
         prev2_move = None # For storing previous 2 moves
         prev2_move_piece = None
+        iterator = 0
 
     
         # iterate through each node for every possible move
         while node is not None:
+            # node.move is the move that lead up to this current position AKA the previous move
+            print("node.move " + str(node.move))
+            prev2_move = prev_move
+            prev2_move_piece = prev_move_piece
+            prev_move = node.move
+            if node.move:
+                prev_move_piece = node.board().piece_at(node.move.to_square)
 
+            tensor = board_tensor(node.board(), prev_move, prev_move_piece, prev2_move, prev2_move_piece)
+            tensor.printTensor()
+        
             # if the comment is none, likely the start of the game
             if not node.comment:
                 clk = '[%clk 0:05:00]' # TODO change to be variable based on time control
             else:
                 clk = node.comment
 
-            tensor = board_tensor(node.board(), prev_move, prev_move_piece, prev2_move, prev2_move_piece)
-            print(tensor.to_string())
-           
-            prev2_move = prev_move
-            prev2_move_piece = prev_move_piece
-            prev_move = node.move
-            if node.move:
-                prev_move_piece = node.board().piece_at(node.move.to_square)
-            
-            node = node.next()
+            # form data here
 
-        
+            node = node.next()
+            iterator += 1
+            if iterator == 3:
+                exit()
+
+
+
 
             # current_move_data = {
             #     "clk" : clk,
@@ -224,21 +205,22 @@ while val <= 10:
 
 
 # write to csv file using the given file name
-# csv_path = "output.csv"
+# parsed_data_YYYY-MM.csv
+csv_path = f"parsed_data_{sys.argv[1]}-{sys.argv[2]}.csv"
 
-# fields = all_games[0].keys()
+fields = all_games[0].keys()
 
-# with open(csv_path, mode='w', newline='') as file:
-#     writer = csv.DictWriter(file, fieldnames=fields)
+with open(csv_path, mode='w', newline='') as file:
+    writer = csv.DictWriter(file, fieldnames=fields)
     
-#     # Write header
-#     writer.writeheader()
+    # Write header
+    writer.writeheader()
     
-#     # Write rows
-#     for row in all_games:
-#         writer.writerow(row)
+    # Write rows
+    for row in all_games:
+        writer.writerow(row)
 
-# print("CSV file written successfully.")
+print("CSV file written successfully.")
 
 
 
