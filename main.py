@@ -32,7 +32,9 @@ class board_tensor:
         self.prev2M = previous2_move
         self.prevM_piece = previous_move_piece
         self.prev2M_piece = previous2_move_piece
+        self.promotionFlag = False
         self.create_tensor()
+        
         
     def create_tensor(self):
         
@@ -48,7 +50,6 @@ class board_tensor:
                 row = move // 8
                 col = move % 8
                 self.tensor[row, col, piece_layer] = piece_color
-
         
         if self.prev2M:
 
@@ -59,6 +60,7 @@ class board_tensor:
 
             if self.prev2M.promotion:
                 prev2_to_piece_type = self.prev2M.promotion
+                self.prev2M_piece.piece_type = 1
             else:
                 prev2_to_piece_type = self.prev2M_piece.piece_type
             
@@ -76,9 +78,10 @@ class board_tensor:
             to_p = self.prevM.to_square
 
             p_color = 1 if self.prevM_piece.color else -1
-
+            
             if self.prevM.promotion:
                 prevM_to_piece = self.prevM.promotion
+                self.prevM_piece.piece_type = 1
             else:
                 prevM_to_piece = self.prevM_piece.piece_type
 
@@ -97,22 +100,49 @@ class board_tensor:
             print(self.tensor[:, :, i])
             print('')
 
+    def flatten(self):
+        # Flatten the 3D array into a 2D list
+        flattened_data = [item for sublist in self.tensor
+                                 for subsublist in sublist 
+                                    for item in subsublist]
+        return flattened_data
+
+
+    def unflatten(self, flattened_data, shape):
+        # Reconstruct the 3D array from the flattened data
+        array_3d = []
+        index = 0
+        for i in range(shape[0]):
+            subarray_2d = []
+            for j in range(shape[1]):
+                subsubarray_1d = []
+                for k in range(shape[2]):
+                    subsubarray_1d.append(flattened_data[index])
+                    index += 1
+                subarray_2d.append(subsubarray_1d)
+            array_3d.append(subarray_2d)
+        return np.array(array_3d)
+
               
 all_games = []
 
 data = open(f"./rawGames/lcdb_{sys.argv[1]}-{sys.argv[2]}.pgn", encoding='utf-8')
+csv_path = f"./parsed/parsed_data_{sys.argv[1]}-{sys.argv[2]}.csv"
 
-val = 0
+fields = ["game_number", "time_control", "moves"]
 
+with open(csv_path, mode='w', newline='') as csv_file:
+    writer = csv.DictWriter(csv_file, fieldnames=fields)
+    # Write header
+    writer.writeheader()
 game_count = 0
 
 # the outer while loop for val <= is for testing purpose to limit the amount it runs just to see if it works
 # for actual parsing purpose, this should just be a while true loop
-while val <= 10:
+while True:
     # iterating through all the games in the file
     # break when there are no more games
     game = chess.pgn.read_game(data)
-    # print(game.headers)
     if game is None:
         break
 
@@ -120,9 +150,10 @@ while val <= 10:
     w_elo = game.headers['WhiteElo']
 
     average_elo = (int(b_elo) + int(w_elo)) / 2
-    
+
+    # 2300 -> 2500 RAPID [600+0]
     # this condition can be changed depending the elo range we want to parse and other conditions
-    if game.headers['TimeControl'] == "300+0" and game.headers['Termination'] == "Normal" and average_elo >= 2000:
+    if game.headers['TimeControl'] == "600+0" and game.headers['Termination'] == "Normal" and average_elo >= 2300 and average_elo <= 2500:
 
         game_data = {
             "game_number" : game_count,
@@ -133,8 +164,6 @@ while val <= 10:
         # setting the current game as the root node
         node = game
 
-        #print(node.board().piece_at(0))
-
         # The library gives the move *leading* to the current position, rather than the 
         # move *played* in the current position, so we need some extra logic
         prev_dict = None # For storing current moves
@@ -143,7 +172,6 @@ while val <= 10:
         prev2_move = None # For storing previous 2 moves
         prev2_move_piece = None
         iterator = 0
-
     
         # iterate through each node for every possible move
         while node is not None:
@@ -156,73 +184,47 @@ while val <= 10:
                 prev_move_piece = node.board().piece_at(node.move.to_square)
 
             tensor = board_tensor(node.board(), prev_move, prev_move_piece, prev2_move, prev2_move_piece)
-            #tensor.printTensor()
-        
+            # print(node.comment)
             # if the comment is none, likely the start of the game
-            if not node.comment:
-                clk = '[%clk 0:05:00]' # TODO change to be variable based on time control, verify data set timing that has %clk
-                                    
-            else:
-                clk = node.comment
-
-            #print(node.comment)
-
+            # defaulting clk to be max time
+            clk = 600 # 600 seconds on the clock default
+            if 'clk' in node.comment:
+                commSplit = node.comment.split(' ') # gives us ['[%clk', '0:01:26]'] or if eval present: ['[%eval', '0.23]', '[%clk', '0:05:42]']
+                time = commSplit[-1].split(']') # gives us ['0:05:42', '']
+                hour, min, sec =  time[0].split(':')
+                clk = 3600 * int(hour) + 60 * int(min) + int(sec)
+                # print(clk)
             # form data here
+            
             current_move_data = {
                 "clk" : clk,
                 "player_to_move" : int(node.turn()),         # True is white, False is black
                 "move" : None,                          # Assigned later when looking at the next position
-                "tensor" : np.array2string((tensor.tensor), separator=',')     
+                "tensor" : str(tensor.flatten()),
+                "castling_right" : node.board().castling_rights    
             }
 
-        
             if(prev_dict):
                 prev_dict["move"] = str(node.move)
-           
-            #temp_dict = create_something(node, board_fen)
-            #list.append(temp_dict)
-
+        
             # appending every move to the list
             game_data['moves'].append(current_move_data)
 
-            # # iterate to the next node
+            # iterate to the next node
             prev_dict = current_move_data
             # prev_move = node.move
 
             node = node.next()
-            
 
         all_games.append(game_data)
-        val += 1   
         game_count += 1
-    else:
-        continue
+        if game_count % 10 == 0:
+            print(f'game_count: {game_count}')
+            with open(csv_path, mode='a', newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=fields)
+                for row in all_games:
+                    writer.writerow(row)
 
-
-# write to csv file using the given file name
-# parsed_data_YYYY-MM.csv
-csv_path = f"./parsed/parsed_data_{sys.argv[1]}-{sys.argv[2]}.csv"
-
-fields = all_games[0].keys()
-
-with open(csv_path, mode='w', newline='') as file:
-    writer = csv.DictWriter(file, fieldnames=fields)
-    
-    # Write header
-    writer.writeheader()
-    
-    # Write rows
-    for row in all_games:
-        writer.writerow(row)
-
+            all_games = []
+            
 print("CSV file written successfully.")
-
-
-
-
-
-
-
-  
-    
-

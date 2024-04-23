@@ -2,3 +2,4 @@
 *.zst
 *.out
 *.csv
+*.err
