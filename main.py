@@ -153,7 +153,7 @@ while True:
 
     # 2300 -> 2500 RAPID [600+0]
     # this condition can be changed depending the elo range we want to parse and other conditions
-    if game.headers['TimeControl'] == "600+0" and game.headers['Termination'] == "Normal" and average_elo >= 2300 and average_elo <= 2500:
+    if game.headers['TimeControl'] == "600+0" and game.headers['Termination'] == "Normal" and average_elo >= 1600:
 
         game_data = {
             "game_number" : game_count,
