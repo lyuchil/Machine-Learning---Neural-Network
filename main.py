@@ -131,7 +131,7 @@ csv_path = f"./parsed/parsed_data_{sys.argv[1]}-{sys.argv[2]}.csv"
 
 fields = ["game_number", "time_control", "moves"]
 
-with open(csv_path, mode='w', newline='') as csv_file:
+with open(csv_path, mode='x', newline='') as csv_file:
     writer = csv.DictWriter(csv_file, fieldnames=fields)
     # Write header
     writer.writeheader()
