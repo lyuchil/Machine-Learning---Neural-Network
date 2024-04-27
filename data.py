@@ -8,14 +8,13 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import numpy as np
 
-ROW_LIMIT = 32
-
 # filenames is a list of filenames
 class ChessDataset(Dataset):
-    def __init__(self, filenames):
+    def __init__(self, filenames, row_limit):
+        self.row_limit = row_limit
         self.filenames = []
         for fn in filenames:
-            self.filenames.append("parsed/parsed_data_" + fn + ".csv")
+            self.filenames.append("/home/rpblair/Machine_Learning/Machine-Learning---Neural-Network/parsed/parsed_data_" + fn + ".csv") # TODO fix path
         self.data_list = self.load_game_data()
 
     # TODO: add flavor for timing progress etc
@@ -28,7 +27,7 @@ class ChessDataset(Dataset):
         # take every game, extract moves into a GIANT list, 
         for file in self.filenames:
             print(f'Loading from {file[19:]}')
-            game_df = pd.read_csv(file, nrows=ROW_LIMIT) # dataframe
+            game_df = pd.read_csv(file, nrows=self.row_limit) # dataframe
             for index, game in game_df.iterrows():
                 if index % 10 == 0:
                     print(f'{index} games loaded!')

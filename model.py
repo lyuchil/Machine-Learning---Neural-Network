@@ -7,13 +7,17 @@ import time
 import pandas as pd
 from data import ChessDataset, printMove
 from torch.utils.data import DataLoader, Dataset
-FILENAMES = ["2018-06"]
+# FILENAMES = ["2018-06"]
+
+# Data parameters
+FILENAMES = ["2023-11"]
+ROW_LIMIT = 5000 # Maximum number of games, None for entire file
 
 # Hyperparameters
-BATCH_SIZE = 64 # The batch size in moves
+BATCH_SIZE = 350 # The batch size in moves, ~35 moves per game
 SHUFFLE_DATA = False
-NUM_EPOCHS = 6
-LEARNING_RATE = 0.001
+NUM_EPOCHS = 10
+LEARNING_RATE = 0.0001
 OUT_CHANNELS = 64
 
 KERNAL_SIZE = 3
@@ -72,14 +76,15 @@ def train(dataset):
             loss = loss_function(predictions, y)
             loss.backward()
             optimizer.step()
+            
+        torch.save(model.state_dict(), './weights/model_weights.pth')
     
     print("Finished training at time", timeSinceStart())
-    torch.save(model.state_dict(), './weights/model_weights.pth')
 
     x, metadata, y  = next(iter(train_loader))
     pred = model(x[:1], metadata[:1])
     print(pred.view(2, 8, 8))
 
 if(__name__ == "__main__"):
-    train_data = ChessDataset(FILENAMES)
+    train_data = ChessDataset(FILENAMES, ROW_LIMIT)
     train(train_data)
