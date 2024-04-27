@@ -7,14 +7,13 @@ import time
 import pandas as pd
 from data import ChessDataset, printMove
 from torch.utils.data import DataLoader, Dataset
-FILENAME = "parsed_data_2018-06.csv"
-FILENAMES = ["2023-10", "2023-11"]
+FILENAMES = ["2018-06"]
 
 # Hyperparameters
 BATCH_SIZE = 64 # The batch size in moves
 SHUFFLE_DATA = False
-NUM_EPOCHS = 1
-LEARNING_RATE = 0.00001 # 0.001 
+NUM_EPOCHS = 6
+LEARNING_RATE = 0.001
 OUT_CHANNELS = 64
 
 KERNAL_SIZE = 3
@@ -43,7 +42,7 @@ class Model(nn.Module):
         # print(x.shape)
         x = torch.relu(self.conv3(x))
         # print(x.shape)
-        x = x.view(x.shape[0], -1) # Flattens to feed into FC layer
+        x = torch.flatten(x, 1) # Flattens to feed into FC layer
         # print(x.shape, metadata.shape)
         # x = torch.cat((x, metadata), dim=1) # Appends metadata
         # print(x.shape)
@@ -61,7 +60,7 @@ def train(dataset):
     # Model initialization
     model = Model()
     loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = optim.Adam(model.parameters())
 
     # Training
     for epoch in range(NUM_EPOCHS):
@@ -75,16 +74,12 @@ def train(dataset):
             optimizer.step()
     
     print("Finished training at time", timeSinceStart())
-    # x, metadata, y = train_data.__getitem__(0)
+    torch.save(model.state_dict(), './weights/model_weights.pth')
 
     x, metadata, y  = next(iter(train_loader))
-    # printMove(x[:1])
-    # print(y[:1].view(2,8,8))
-    # print(x[:1].shape)
-    print(metadata[:1])
     pred = model(x[:1], metadata[:1])
     print(pred.view(2, 8, 8))
-    
+
 if(__name__ == "__main__"):
     train_data = ChessDataset(FILENAMES)
     train(train_data)
