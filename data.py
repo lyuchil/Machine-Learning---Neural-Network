@@ -14,7 +14,7 @@ class ChessDataset(Dataset):
         self.row_limit = row_limit
         self.filenames = []
         for fn in filenames:
-            self.filenames.append("/home/rpblair/Machine_Learning/Machine-Learning---Neural-Network/parsed/parsed_data_" + fn + ".csv") # TODO fix path
+            self.filenames.append("parsed/parsed_data_" + fn + ".csv") 
         self.data_list = self.load_game_data()
 
     # TODO: add flavor for timing progress etc
@@ -29,7 +29,7 @@ class ChessDataset(Dataset):
             print(f'Loading from {file[19:]}')
             game_df = pd.read_csv(file, nrows=self.row_limit) # dataframe
             for index, game in game_df.iterrows():
-                if index % 10 == 0:
+                if index % 200 == 0:
                     print(f'{index} games loaded!')
                 [x, metadata, y] = parse_game(game)
                 x_list.append(x)
@@ -61,17 +61,19 @@ def parse_game(game):
         elif move[-2:] == "}]":
             move = move[:-2]    
 
-        move = eval("{" + move + "}") # Python magic that converts string to dict
-
-        if(not move["move"]):
-            continue
-        x = np.array(json.loads(move["tensor"])) # Converts from string to list
-        x = unflatten(x, (8, 8, 18))
-        y = move_to_tensor(move["move"])
-        y = y.reshape(128)
-        x_tensor.append(x)
-        y_tensor.append(y)
-        metadata_tensor.append([move["clk"], move["player_to_move"], 0]) # TODO add back castling right
+        try:
+            move = eval("{" + move + "}") # Python magic that converts string to dict
+            if(not move["move"]):
+                continue
+            x = np.array(json.loads(move["tensor"])) # Converts from string to list
+            x = unflatten(x, (8, 8, 18))
+            y = move_to_tensor(move["move"])
+            y = y.reshape(128)
+            x_tensor.append(x)
+            y_tensor.append(y)
+            metadata_tensor.append([move["clk"], move["player_to_move"], 0]) # TODO add back castling right
+        except SyntaxError as e:
+            print("Syntax error while parsing game", e)
 
     x_tensor = torch.tensor(np.array(x_tensor)).float()
     y_tensor = torch.tensor(np.array(y_tensor)).float()
@@ -110,13 +112,36 @@ def unflatten(flattened_data, shape):
         return outp.transpose(2, 0, 1) 
 
 def printMove(move):
+    cur_board = np.full((8,8), ' ', dtype='U10')
+    prev_board = np.full((8,8), ' ', dtype='U10')
     if len(move.shape) == 4:
-        for i in range(move.shape[1]):
-            print(f"Layer {i}")
-            print(move[0, i, :, :])
-            print('')
+        for i in range(0,6):
+            for j in range(0,8):
+                for k in range(0,8):
+                    piece = move[0, i, j, k]
+                    prev_piece = move[0, i+6, j, k]
+                    if piece == 1:
+                        cur_board[j,k] = chess.PIECE_SYMBOLS[i+1].upper()
+                    elif piece == -1:
+                        cur_board[j,k] = chess.PIECE_SYMBOLS[i+1]
+                    if prev_piece == 1:
+                        prev_board[j,k] = chess.PIECE_SYMBOLS[i+1].upper()
+                    elif prev_piece == -1:
+                        prev_board[j,k] = chess.PIECE_SYMBOLS[i+1]
+
+        print("Current Board State")
+        print(cur_board)
+        print("Previously Moved Pieces")
+        print(prev_board)
     else:
         for i in range(move.shape[0]):
             print(f"Layer {i}")
             print(move[i, :, :])
             print('')
+
+
+    # if len(move.shape) == 4:
+    #     for i in range(move.shape[1]):
+    #         print(f"Layer {i}")
+    #         print(move[0, i, :, :])
+    #         print('')
