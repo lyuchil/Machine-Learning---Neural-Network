@@ -27,8 +27,11 @@ class ChessDataset(Dataset):
         y_list = []
         # take every game, extract moves into a GIANT list, 
         for file in self.filenames:
-            game_df = pd.read_csv(file, nrows=60) # dataframe
+            print(f'Loading from {file[19:]}')
+            game_df = pd.read_csv(file, nrows=25) # dataframe
             for index, game in game_df.iterrows():
+                if index % 10 == 0:
+                    print(f'{index} games loaded!')
                 [x, metadata, y] = parse_game(game)
                 x_list.append(x)
                 metadata_list.append(metadata)
@@ -167,3 +170,15 @@ def unflatten(flattened_data, shape):
 
         outp = np.array(array_3d)
         return outp.transpose(2, 0, 1) 
+
+def printMove(move):
+    if len(move.shape) == 4:
+        for i in range(move.shape[1]):
+            print(f"Layer {i}")
+            print(move[0, i, :, :])
+            print('')
+    else:
+        for i in range(move.shape[0]):
+            print(f"Layer {i}")
+            print(move[i, :, :])
+            print('')
