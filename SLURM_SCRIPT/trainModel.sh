@@ -5,6 +5,7 @@
 #SBATCH -J "Training Time"
 #SBATCH -p academic
 #SBATCH -t 24:00:00
+#SBATCH --gres=gpu:1
 #SBATCH --mail-user=rpblair@wpi.edu
 #SBATCH --mail-type=ALL
 #SBATCH --out=slurm_train_chess_model%A.out
