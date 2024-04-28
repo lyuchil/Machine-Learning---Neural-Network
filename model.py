@@ -9,15 +9,16 @@ from data import ChessDataset, printMove
 from torch.utils.data import DataLoader, Dataset
 """TODO: 
     Legality checking / reporting
+        arg_max (legal) from layer
+            from selected piece, arg_max (legal) to_layer
     Implementing accuracy checking during training
-    Giving wieght file to front-end peeps
+    castling rights
     Train a big boi model
-    Implement Metadata
 """
 # Data parameters
 TRAIN_FILENAMES = ["2023-11", "2023-12"]
 EVAL_FILENAMES = ["2024-01"]
-WEIGHT_FILEPATH = "weights/job_470735/model_weights9.pth"
+WEIGHT_FILEPATH = "weights/job_470752/model_weights9.pth"
 ROW_LIMIT = 2500 # Maximum number of games, None for entire file # 2500 took an hour, 5000 took 2 hours
 
 # Hyperparameters ~35 moves per game 
@@ -41,7 +42,7 @@ class Model(nn.Module):
         self.conv1 = nn.Conv2d(18, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING)
         self.conv2 = nn.Conv2d(OUT_CHANNELS, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING) 
         self.conv3 = nn.Conv2d(OUT_CHANNELS, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING)
-        self.fc1 = nn.Linear(OUT_CHANNELS * 8 * 8, OUT_CHANNELS * 8 * 8) # 4099, 4096
+        self.fc1 = nn.Linear(OUT_CHANNELS * 8 * 8 + 3, OUT_CHANNELS * 8 * 8) # 4099, 4096
         self.fc2 = nn.Linear(OUT_CHANNELS * 8 * 8, OUT_CHANNELS * 8 * 8)
         self.fc3 = nn.Linear(OUT_CHANNELS * 8 * 8, 128)
 
@@ -55,7 +56,7 @@ class Model(nn.Module):
         # print(x.shape)
         x = torch.flatten(x, 1) # Flattens to feed into FC layer
         # print(x.shape, metadata.shape)
-        # x = torch.cat((x, metadata), dim=1) # Appends metadata
+        x = torch.cat((x, metadata), dim=1) # Appends metadata
         # print(x.shape)
 
         x = torch.selu(self.fc1(x))
