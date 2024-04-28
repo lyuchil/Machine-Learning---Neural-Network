@@ -12,14 +12,13 @@ from torch.utils.data import DataLoader, Dataset
         arg_max (legal) from layer
             from selected piece, arg_max (legal) to_layer
     Implementing accuracy checking during training
-    castling rights
     Train a big boi model
 """
 # Data parameters
 TRAIN_FILENAMES = ["2023-11", "2023-12"]
 EVAL_FILENAMES = ["2024-01"]
-WEIGHT_FILEPATH = "weights/job_470752/model_weights9.pth"
-ROW_LIMIT = 2500 # Maximum number of games, None for entire file # 2500 took an hour, 5000 took 2 hours
+WEIGHT_FILEPATH = "weights/job_471262/model_weights9.pth" # best so far "weights/job_470752/model_weights9.pth"
+ROW_LIMIT = 2 # Maximum number of games, None for entire file # 2500 took an hour, 5000 took 2 hours
 
 # Hyperparameters ~35 moves per game 
 BATCH_SIZE = 64 # The batch size in moves, 350 kinda worked
@@ -42,7 +41,7 @@ class Model(nn.Module):
         self.conv1 = nn.Conv2d(18, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING)
         self.conv2 = nn.Conv2d(OUT_CHANNELS, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING) 
         self.conv3 = nn.Conv2d(OUT_CHANNELS, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING)
-        self.fc1 = nn.Linear(OUT_CHANNELS * 8 * 8 + 3, OUT_CHANNELS * 8 * 8) # 4099, 4096
+        self.fc1 = nn.Linear(OUT_CHANNELS * 8 * 8 + 6, OUT_CHANNELS * 8 * 8) # 5002, 4096
         self.fc2 = nn.Linear(OUT_CHANNELS * 8 * 8, OUT_CHANNELS * 8 * 8)
         self.fc3 = nn.Linear(OUT_CHANNELS * 8 * 8, 128)
 
@@ -108,7 +107,6 @@ def evalMode(job_id):
     loaded_model.load_state_dict(torch.load(WEIGHT_FILEPATH, map_location=torch.device('cpu')))
     loaded_model.eval() # disables training mode. 
     print("===Making Predicitons===")
-    # x, metadata, y  = next(iter(eval_loader))
     move_counter = 0
     correct_counter = 0
     for x, metadata, y in eval_loader:

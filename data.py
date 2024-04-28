@@ -71,7 +71,16 @@ def parse_game(game):
             y = y.reshape(128)
             x_tensor.append(x)
             y_tensor.append(y)
-            metadata_tensor.append([move["clk"], move["player_to_move"], 0]) # TODO add back castling right
+            """
+            0th bit -- A1 white queenside 
+            7th bit -- H1 white kingside
+            56th bit -- A8 black queenside
+            63rd bit -- H8 black kingside
+            """
+            new_castling_rights = [move["castling_right"] & chess.BB_A1,  (move["castling_right"] & chess.BB_H1) >> 6, 
+                                   (move["castling_right"] & chess.BB_A8) >> 54, (move["castling_right"] & chess.BB_H8) >> 60 ] 
+            metadata = [move["clk"], move["player_to_move"]] + new_castling_rights
+            metadata_tensor.append(metadata) 
         except SyntaxError as e:
             print("Syntax error while parsing game", e)
 
