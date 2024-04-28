@@ -2,22 +2,39 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-import csv
 import sys
-import chess
-import json
+import time
+import pandas as pd
+from data import ChessDataset, printMove
+from torch.utils.data import DataLoader, Dataset
+"""TODO: 
+    Legality checking / reporting
+        arg_max (legal) from layer
+            from selected piece, arg_max (legal) to_layer
+    Implementing accuracy checking during training
+    castling rights
+    Train a big boi model
+"""
+# Data parameters
+TRAIN_FILENAMES = ["2023-11", "2023-12"]
+EVAL_FILENAMES = ["2024-01"]
+WEIGHT_FILEPATH = "weights/job_470752/model_weights9.pth"
+ROW_LIMIT = 2500 # Maximum number of games, None for entire file # 2500 took an hour, 5000 took 2 hours
 
-FILENAME = "parsed_data_2018-06.csv"
-
-# Hyperparameters
-BATCH_SIZE = 30 # The batch size in number of **games** (not moves, so the tensor fed into the model is bigger)
-NUM_EPOCHS = 1
-LEARNING_RATE = 0.001
+# Hyperparameters ~35 moves per game 
+BATCH_SIZE = 64 # The batch size in moves, 350 kinda worked
+SHUFFLE_DATA = True
+NUM_EPOCHS = 10
+LEARNING_RATE = 0.00001 # 0.0001 kinda worked with batch size 350
 OUT_CHANNELS = 64
 
 KERNAL_SIZE = 3
 PADDING = 1
 
+START_TIME = time.time()
+
+def timeSinceStart():
+    return time.time() - START_TIME
 
 class Model(nn.Module):
     def __init__(self):
@@ -25,133 +42,118 @@ class Model(nn.Module):
         self.conv1 = nn.Conv2d(18, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING)
         self.conv2 = nn.Conv2d(OUT_CHANNELS, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING) 
         self.conv3 = nn.Conv2d(OUT_CHANNELS, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING)
-        self.fc1 = nn.Linear(OUT_CHANNELS * 8 * 8, OUT_CHANNELS * 8 * 8)
-        self.fc2 = nn.Linear(OUT_CHANNELS * 8 * 8, 128)
+        self.fc1 = nn.Linear(OUT_CHANNELS * 8 * 8 + 3, OUT_CHANNELS * 8 * 8) # 4099, 4096
+        self.fc2 = nn.Linear(OUT_CHANNELS * 8 * 8, OUT_CHANNELS * 8 * 8)
+        self.fc3 = nn.Linear(OUT_CHANNELS * 8 * 8, 128)
 
     def forward(self, x, metadata):
-        print(x.shape)
-        x = torch.relu(self.conv1(x))
-        print(x.shape)
-        x = torch.relu(self.conv2(x))
-        print(x.shape)
-        x = torch.relu(self.conv3(x))
-        print(x.shape)
-        
-        x = x.view(x.shape[0], -1) # Flattens to feed into FC layer
-        print(x.shape)
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
+        # print(x.shape)
+        x = torch.selu(self.conv1(x))
+        # print(x.shape)
+        x = torch.selu(self.conv2(x))
+        # print(x.shape)
+        x = torch.selu(self.conv3(x))
+        # print(x.shape)
+        x = torch.flatten(x, 1) # Flattens to feed into FC layer
+        # print(x.shape, metadata.shape)
+        x = torch.cat((x, metadata), dim=1) # Appends metadata
+        # print(x.shape)
+
+        x = torch.selu(self.fc1(x))
+        x = torch.selu(self.fc2(x))
+        x = torch.selu(self.fc3(x))
         return x
-    
-# Converts a move string such as "e2e4" into the appropriate tensor
-def move_to_tensor(move_str):
-    from_square = chess.parse_square(move_str[:2])
-    to_square =chess.parse_square(move_str[2:4])
 
-    from_tensor = np.zeros((8, 8))
-    to_tensor = np.zeros((8, 8))
+def train(dataset, job_id):
+    # Data initialization
+    train_data = dataset
+    train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=SHUFFLE_DATA)
 
-    from_tensor[from_square // 8][from_square % 8] = 1
-    to_tensor[to_square // 8][to_square % 8] = 1
-
-    return np.array([from_tensor, to_tensor])
-    
-def unflatten(flattened_data, shape):
-        # Reconstruct the 3D array from the flattened data
-        array_3d = []
-        index = 0
-        for i in range(shape[0]):
-            subarray_2d = []
-            for j in range(shape[1]):
-                subsubarray_1d = []
-                for k in range(shape[2]):
-                    subsubarray_1d.append(flattened_data[index])
-                    index += 1
-                subarray_2d.append(subsubarray_1d)
-            array_3d.append(subarray_2d)
-
-        outp = np.array(array_3d)
-        return outp.transpose(2, 0, 1) 
-
-def load_game(csv_reader):
-    x_tensor = []
-    y_tensor = []
-    metadata_tensor = []
-
-    csv.field_size_limit(sys.maxsize)
-    game = next(csv_reader)
-
-    moves = game[2].split("}, {")
-    for move in moves:
-        if move[0:2] == "[{":
-            move = move[2:]
-        elif move[-2:] == "}]":
-            move = move[:-2]
-        move = eval("{" + move + "}")
-        if(not move["move"]):
-            continue
-        x = np.array(json.loads(move["tensor"])) # Converts from string to list
-        x = unflatten(x, (8, 8, 18))
-        y = move_to_tensor(move["move"])
-        y = y.reshape(128)
-        x_tensor.append(x)
-        y_tensor.append(y)
-        metadata_tensor.append([move["clk"], move["player_to_move"], move["castling_right"]])
-
-    x_tensor = np.array(x_tensor)
-    y_tensor = np.array(y_tensor)
-    metadata_tensor = np.array(metadata_tensor)
-
-    return x_tensor, metadata_tensor, y_tensor
-
-def load_batch():
-    x_batch = None
-    metadata_batch = None
-    y_batch = None
-    
-    file = open("parsed/" + FILENAME, mode="r")
-    print("open")
-    csv_reader = csv.reader(file)
-    next(csv_reader) # ignore header
-
-    for _ in range(BATCH_SIZE):
-        [x, metadata, y] = load_game(csv_reader)
-        if(type(x_batch) != np.ndarray):
-            x_batch = x
-            metadata_batch = metadata
-            y_batch = y
-        else:
-            x_batch = np.concatenate((x_batch, x), axis=0)
-            metadata_batch = np.concatenate((metadata_batch, metadata), axis=0)
-            y_batch = np.concatenate((y_batch, y), axis=0)
-
-    print(x_batch.shape)
-    print(y_batch.shape)
-    x_batch = torch.tensor(x_batch).float()
-    metadata_batch = torch.tensor(metadata_batch).float()
-    y_batch = torch.tensor(y_batch).float()
-    
-    return x_batch, metadata_batch, y_batch
-
-def train():
+    # Model initialization
     model = Model()
+    model.cuda()
     loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9) # SGD instead of ADAM
 
+    # Training
     for epoch in range(NUM_EPOCHS):
+        print(f"Started epoch {epoch+1} at time {timeSinceStart()}")
         model.train()
-        [x, metadata, y] = load_batch()
-        print("data loaded")
-        optimizer.zero_grad()
-        predictions = model(x, metadata)
-        print(predictions.shape)
-        print(y.shape)
-        loss = loss_function(predictions, y)
-        loss.backward()
-        optimizer.step()
+        for x, metadata, y in train_loader:
+            x, metadata, y = x.cuda(), metadata.cuda(), y.cuda()
+            optimizer.zero_grad()
+            predictions = model(x, metadata)
+            loss = loss_function(predictions, y)
+            loss.backward()
+            optimizer.step()
+            
+        torch.save(model.state_dict(), f'./weights/job_{job_id}/model_weights{epoch}.pth')
+    
+    print("Finished training at time", timeSinceStart())
 
-        print(model(x[:1], metadata[:1]).view(2, 8, 8))
+def trainMode(job_id):
+    print(f'Starting batch job: {job_id}')
+    print("===Creating Dataset===")
+    train_data = ChessDataset(TRAIN_FILENAMES, ROW_LIMIT)
+    print("===Beginning Training===")
+    train(train_data, job_id)
+
+def evalMode(job_id):
+    print("===Loading Eval Set===")
+    # for now, we are only loading 1 games worth, and with a batch size of 1
+    eval_data = ChessDataset(EVAL_FILENAMES, 100)
+    eval_loader = DataLoader(eval_data, batch_size=1, shuffle=False)
+    print("===Loading Trained Model===")
+    loaded_model = Model()
+    loaded_model.load_state_dict(torch.load(WEIGHT_FILEPATH, map_location=torch.device('cpu')))
+    loaded_model.eval() # disables training mode. 
+    print("===Making Predicitons===")
+    # x, metadata, y  = next(iter(eval_loader))
+    move_counter = 0
+    correct_counter = 0
+    for x, metadata, y in eval_loader:
+        pred = loaded_model(x, metadata)
+        predicted_move = selectMove(pred)
+        y_eval = y.view(2,8,8).numpy()
+        if np.array_equal(predicted_move,y_eval):
+            correct_counter +=1
+        move_counter +=1
+    
+    print(f'Final Accuracy: {correct_counter}/{move_counter} = {correct_counter/move_counter}')
+    
+def selectMove(prediction):
+    # select largest from both layers
+    # set everything to 0 but those two vals
+    # Expects a model forward result in the form of a [1,126]
+    np_pred = prediction.detach().numpy()
+    # print(np_pred)
+    # print(np_pred.shape)
+    # print(np_pred[0,:63])
+    # print(np_pred[0,64:])
+
+    from_val = np.argmax(np_pred[0,:63])
+    to_val = np.argmax(np_pred[0,64:])
+    # print(f'from_val: {from_val} to_val: {to_val}')
+
+    pred_move = np.zeros((2,8,8))
+    pred_move[0,from_val//8, from_val % 8] = 1
+    pred_move[1,to_val//8, to_val % 8] = 1
+    # print(pred_move)
+    return pred_move
 
 
 if(__name__ == "__main__"):
-    train()
+    args = sys.argv
+    print(f'arguments: {args}')
+    # first is name of file, second is job_id, third is mode (true = train)
+
+    if len(args) == 3:
+        if args[2] == 'False':
+            evalMode(args[1])
+        else:
+            trainMode(args[1])
+    else:
+        trainMode(args[1])
+
+
+    

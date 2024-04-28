@@ -3,3 +3,6 @@
 *.out
 *.csv
 *.err
+*.pth
+**__pycache__/**
+**.venv/**
