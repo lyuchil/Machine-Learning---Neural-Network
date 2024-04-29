@@ -11,21 +11,21 @@ from torch.utils.data import DataLoader, Dataset
     Legality checking / reporting
         arg_max (legal) from layer
             from selected piece, arg_max (legal) to_layer
-    Implementing accuracy checking during training
     Train a big boi model
 """
 # Data parameters
-TRAIN_FILENAMES = ["2023-10", "2023-12", "2024-02","2024-03",]
+TRAIN_FILENAMES = ["2023-10", "2023-12", "2024-02","2024-03"]
 EVAL_FILENAMES = ["2023-11"]
 TEST_FILENAMES = ["2024-01"]
-WEIGHT_FILEPATH = "weights/job_471557/model_weights9.pth" # best so far "weights/job_471557/model_weights9.pth"
-ROW_LIMIT = 1250 # Maximum number of games, None for entire file # 2500 took an hour, 5000 took 2 hours
+WEIGHT_FILEPATH = "weights/job_471755/model_weights9.pth" # best so far "weights/job_471557/model_weights9.pth"
+ROW_LIMIT = 7500 
 
 # Hyperparameters ~35 moves per game 
-BATCH_SIZE = 64 # The batch size in moves, 350 kinda worked
+BATCH_SIZE = 32 # The batch size in moves, 350 kinda worked
 SHUFFLE_DATA = True
-NUM_EPOCHS = 10
-LEARNING_RATE = 5e-6 # 1e-5 best
+NUM_EPOCHS = 50
+LEARNING_RATE = 5e-6
+MOMENTUM = 0.95
 OUT_CHANNELS = 64
 
 KERNAL_SIZE = 3
@@ -62,6 +62,12 @@ class Model(nn.Module):
         x = torch.selu(self.fc1(x))
         x = torch.selu(self.fc2(x))
         x = torch.selu(self.fc3(x))
+
+        # x = torch.sigmoid(x)
+        # code using softmax
+        x1 = torch.nn.functional.softmax(x[:, :64], dim=1)
+        x2 = torch.nn.functional.softmax(x[:, 64:], dim=1)
+        x = torch.cat((x1,x2), dim=1)
         return x
 
 def train(train_files, eval_files, job_id):
@@ -78,24 +84,26 @@ def train(train_files, eval_files, job_id):
     model = Model()
     model.cuda()
     loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9) #0.9 gave us 1% best
+    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM) #0.9 gave us 1% best
 
     # Training
     print(f"Started training at {round(timeSinceStart(),2)}")
     for epoch in range(NUM_EPOCHS):
         model.train()
+        epoch_loss = 0
         for x, metadata, y in train_loader:
             x, metadata, y = x.cuda(), metadata.cuda(), y.cuda()
             optimizer.zero_grad()
             predictions = model(x, metadata)
             loss = loss_function(predictions, y)
+            epoch_loss += loss.item()
             loss.backward()
             optimizer.step()
         #Save model state
         torch.save(model.state_dict(), f'./weights/job_{job_id}/model_weights{epoch}.pth')
         # validation after epoch  
         correct, moves = evaluate(model, eval_loader, True)
-        print(f'Ended training epoch {epoch+1} at {round(timeSinceStart(),2)} with accuracy: {correct}/{moves} = {round(correct/moves,7)}')
+        print(f'[Epoch {epoch+1}, Time {round(timeSinceStart(),2)}] acc: {correct}/{moves} ({round(correct/moves,5)}) and loss {round(epoch_loss,2)}')
             
     print("Finished training at time", timeSinceStart())
     testMode(TEST_FILENAMES, model, True)
@@ -118,7 +126,7 @@ def testMode(test_files, curr_model, cuda_enabled):
             model.load_state_dict(torch.load(WEIGHT_FILEPATH, map_location=torch.device('cpu')))
     print("=== Making Predicitons ===")
     correct, moves = evaluate(model, test_loader, cuda_enabled)
-    print(f'Final Accuracy: {correct}/{moves} = {round(correct/moves)}')
+    print(f'Final Accuracy: {correct}/{moves} = {round(correct/moves, 5)}')
 
 def evaluate(model, dataset_loader, cuda_enabled):
     move_counter, correct_counter = 0, 0
@@ -131,8 +139,7 @@ def evaluate(model, dataset_loader, cuda_enabled):
             predicted_move = selectMove(pred)
             if cuda_enabled:
                 predicted_move = predicted_move.cuda()
-            # print("Pred vs predicted_move")
-            # print(pred.view(2,8,8))
+            # print(torch.round(pred, decimals=3).view(2,8,8))
             # print(predicted_move.view(2,8,8))
             # print("Prediction - Answer")
             # diff = predicted_move - y
@@ -147,7 +154,7 @@ def selectMove(prediction):
     # set everything to 0 but those two vals
     # Expects a model forward result in the form of a [1,126]
 
-    from_val = torch.argmax(prediction[0,:63])
+    from_val = torch.argmax(prediction[0,:64])
     to_val = torch.argmax(prediction[0,64:])
 
     pred_move = torch.zeros((1,128))

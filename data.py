@@ -20,7 +20,7 @@ class ChessDataset(Dataset):
     # TODO: add flavor for timing progress etc
     # tentative add multithreading for parsing...?
     def load_game_data(self):
-        print("===LOADING GAMES!===")
+        print("=== LOADING GAMES! ===")
         x_list = []
         metadata_list = []
         y_list = []
@@ -28,15 +28,16 @@ class ChessDataset(Dataset):
         for file in self.filenames:
             print(f'Loading from {file[19:]}')
             game_df = pd.read_csv(file, nrows=self.row_limit) # dataframe
-            percent_thresh = 0.24
+            percent_thresh = 0.25
             for index, game in game_df.iterrows():
                 if index / self.row_limit > percent_thresh:
+                    print(f'{percent_thresh*100}% of games loaded!')
                     percent_thresh += .25
-                    print(f'{(index / self.row_limit)*100}% of games loaded!')
                 [x, metadata, y] = parse_game(game)
                 x_list.append(x)
                 metadata_list.append(metadata)
                 y_list.append(y)
+            print(f'100.0% of games loaded')
         x_list = torch.cat(x_list, dim=0)
         metadata_list = torch.cat(metadata_list, dim=0)
         y_list = torch.cat(y_list, dim=0)
