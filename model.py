@@ -5,7 +5,7 @@ import numpy as np
 import sys
 import time
 import pandas as pd
-from data import ChessDataset, printMove
+from data import ChessDataset, printMove, selectMove
 from torch.utils.data import DataLoader, Dataset
 """TODO: 
     Legality checking / reporting
@@ -17,14 +17,15 @@ from torch.utils.data import DataLoader, Dataset
 TRAIN_FILENAMES = ["2023-10", "2023-12", "2024-02","2024-03"]
 EVAL_FILENAMES = ["2023-11"]
 TEST_FILENAMES = ["2024-01"]
-WEIGHT_FILEPATH = "weights/job_471755/model_weights9.pth" # best so far "weights/job_471557/model_weights9.pth"
-ROW_LIMIT = 7500 
+WEIGHT_FILEPATH = "weights/job_472107/model_weights19.pth" # best so far "weights/job_471557/model_weights9.pth"
+ROW_LIMIT = 10000 
+DEBUG_FLAG = False
 
 # Hyperparameters ~35 moves per game 
-BATCH_SIZE = 32 # The batch size in moves, 350 kinda worked
+BATCH_SIZE = 64 # The batch size in moves, 350 kinda worked
 SHUFFLE_DATA = True
 NUM_EPOCHS = 50
-LEARNING_RATE = 5e-6
+LEARNING_RATE = 1e-2 # 5e-4 == 2.5% 7.5e-4 2.3% one run at 8e-4 second run at 1e-2
 MOMENTUM = 0.95
 OUT_CHANNELS = 64
 
@@ -139,28 +140,14 @@ def evaluate(model, dataset_loader, cuda_enabled):
             predicted_move = selectMove(pred)
             if cuda_enabled:
                 predicted_move = predicted_move.cuda()
-            # print(torch.round(pred, decimals=3).view(2,8,8))
-            # print(predicted_move.view(2,8,8))
-            # print("Prediction - Answer")
-            # diff = predicted_move - y
-            # print(diff.view(2,8,8))
+            if DEBUG_FLAG:
+                print(torch.round(pred, decimals=3).view(2,8,8))
+                print(predicted_move.view(2,8,8))
+                exit()
             if torch.equal(predicted_move,y):
                 correct_counter +=1
             move_counter +=1
     return correct_counter, move_counter
-    
-def selectMove(prediction):
-    # select largest from both layers
-    # set everything to 0 but those two vals
-    # Expects a model forward result in the form of a [1,126]
-
-    from_val = torch.argmax(prediction[0,:64])
-    to_val = torch.argmax(prediction[0,64:])
-
-    pred_move = torch.zeros((1,128))
-    pred_move[0, from_val] = 1
-    pred_move[0, to_val + 64] = 1
-    return pred_move
 
 
 if(__name__ == "__main__"):

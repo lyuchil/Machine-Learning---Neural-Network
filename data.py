@@ -151,9 +151,83 @@ def printMove(move):
             print(move[i, :, :])
             print('')
 
+def selectMove(prediction):
+    # select largest from both layers
+    # set everything to 0 but those two vals
+    # Expects a model forward result in the form of a [1,126]
 
-    # if len(move.shape) == 4:
-    #     for i in range(move.shape[1]):
-    #         print(f"Layer {i}")
-    #         print(move[0, i, :, :])
-    #         print('')
+    from_val = torch.argmax(prediction[0,:64])
+    to_val = torch.argmax(prediction[0,64:])
+
+    pred_move = torch.zeros((1,128))
+    pred_move[0, from_val] = 1
+    pred_move[0, to_val + 64] = 1
+    return pred_move
+
+def tensor_to_fen(x_tensor):
+    cur_board = np.full((8,8), ' ', dtype='U10')
+    print(x_tensor.shape)
+    for i in range(0,6):
+        for j in range(0,8):
+            for k in range(0,8):
+                piece = x_tensor[i, j, k]
+                # print(piece)
+                if piece == 1:
+                    cur_board[j,k] = chess.PIECE_SYMBOLS[i+1].upper()
+                elif piece == -1:
+                    cur_board[j,k] = chess.PIECE_SYMBOLS[i+1]
+    # we now have an 8x8 board  
+    print(cur_board.shape)
+    print(cur_board)
+    fen_string = ''
+    empty_count = 0
+
+    for rank in range(7, -1, -1):  # Loop through ranks from 8 to 1
+        for file in range(0, 8):  # Loop through files from a to h
+            # piece = board.piece_at(8 * rank + file)
+            piece = cur_board[rank,file]
+            if piece == ' ':
+                empty_count += 1
+            else:
+                if empty_count > 0:
+                    fen_string += str(empty_count)
+                    empty_count = 0
+                fen_string += piece
+
+        if empty_count > 0:
+            fen_string += str(empty_count)
+            empty_count = 0
+
+        if rank > 0:
+            fen_string += '/'
+
+    fen_string += ' '
+    print(fen_string)
+
+
+def find_legal_move(x_tensor, metadata_tensor, prediction):
+    # takes an X-by-126 and X-by-6 from the model and outputs a X-by-126 with only two squares selected per layer (a from square and a to square)
+    # the move it selects will be a legal move in the given position
+
+    # translate tensor into FEN, 
+    # use board class and iterate through legal_moves list
+    # find from square move with the highest predicted val 
+        # find the to square with the highest legal predicted val
+    for i in range(x_tensor.shape[0]):
+        cur_fen = tensor_to_fen(x_tensor[i])
+        cur_board = chess.Board(cur_fen)
+        cur_board.turn = metadata_tensor[i,1] # should be 1 or 0
+        # castling rights stuff
+        castling_rights_fen = ''
+        if metadata_tensor[i, 3]:
+            castling_rights_fen += 'K'
+        if metadata_tensor[i, 3]:
+            castling_rights_fen += 'K'
+    
+if(__name__ == "__main__"):
+    args = sys.argv
+    test_data = ChessDataset(["2024-01"], 1)
+    test_loader = DataLoader(test_data, batch_size=2, shuffle=False)
+
+    for x, metadata, y in test_loader:
+        find_legal_move(x,metadata, None)
