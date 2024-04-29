@@ -166,7 +166,6 @@ def selectMove(prediction):
 
 def tensor_to_fen(x_tensor):
     cur_board = np.full((8,8), ' ', dtype='U10')
-    print(x_tensor.shape)
     for i in range(0,6):
         for j in range(0,8):
             for k in range(0,8):
@@ -177,7 +176,6 @@ def tensor_to_fen(x_tensor):
                 elif piece == -1:
                     cur_board[j,k] = chess.PIECE_SYMBOLS[i+1]
     # we now have an 8x8 board  
-    print(cur_board.shape)
     print(cur_board)
     fen_string = ''
     empty_count = 0
@@ -201,8 +199,8 @@ def tensor_to_fen(x_tensor):
         if rank > 0:
             fen_string += '/'
 
-    fen_string += ' '
     print(fen_string)
+    return fen_string
 
 
 def find_legal_move(x_tensor, metadata_tensor, prediction):
@@ -215,15 +213,38 @@ def find_legal_move(x_tensor, metadata_tensor, prediction):
         # find the to square with the highest legal predicted val
     for i in range(x_tensor.shape[0]):
         cur_fen = tensor_to_fen(x_tensor[i])
-        cur_board = chess.Board(cur_fen)
-        cur_board.turn = metadata_tensor[i,1] # should be 1 or 0
+        if metadata_tensor[i, 1]:
+            cur_fen += ' w'
+        else:
+            cur_fen += ' b'
         # castling rights stuff
-        castling_rights_fen = ''
+        castling_rights_fen = ' '
         if metadata_tensor[i, 3]:
             castling_rights_fen += 'K'
-        if metadata_tensor[i, 3]:
-            castling_rights_fen += 'K'
-    
+        if metadata_tensor[i, 2]:
+            castling_rights_fen += 'Q'
+        if metadata_tensor[i, 5]:
+            castling_rights_fen += 'k'
+        if metadata_tensor[i, 4]:
+            castling_rights_fen += 'q'
+
+        cur_fen += castling_rights_fen
+        if castling_rights_fen == ' ':
+            cur_fen += '-'
+        
+        cur_fen += ' -'
+        cur_fen += ' 0 1'
+        cur_board = chess.Board(cur_fen)
+        print('cur_board object')
+        print(cur_board)
+        print('cur_board legal_moves')
+        print(cur_board.legal_moves)
+        for move in cur_board.legal_moves:
+            print(move)
+            print(type(move))
+            # OTHER LOGIC GOES HERE!
+        
+        exit()
 if(__name__ == "__main__"):
     args = sys.argv
     test_data = ChessDataset(["2024-01"], 1)

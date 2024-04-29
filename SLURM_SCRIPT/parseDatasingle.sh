@@ -12,4 +12,4 @@
 cd /home/rpblair/Machine_Learning/Machine-Learning---Neural-Network
 source ./runRequirements.sh
 
-python main.py 2024 02
+python main.py 2018 06

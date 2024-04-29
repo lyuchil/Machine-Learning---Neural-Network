@@ -184,6 +184,7 @@ while True:
                 prev_move_piece = node.board().piece_at(node.move.to_square)
 
             tensor = board_tensor(node.board(), prev_move, prev_move_piece, prev2_move, prev2_move_piece)
+            # tensor.printTensor()
             # print(node.comment)
             # if the comment is none, likely the start of the game
             # defaulting clk to be max time
