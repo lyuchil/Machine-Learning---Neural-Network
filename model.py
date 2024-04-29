@@ -15,16 +15,17 @@ from torch.utils.data import DataLoader, Dataset
     Train a big boi model
 """
 # Data parameters
-TRAIN_FILENAMES = ["2023-11", "2023-12"]
-EVAL_FILENAMES = ["2024-01"]
-WEIGHT_FILEPATH = "weights/job_471262/model_weights9.pth" # best so far "weights/job_470752/model_weights9.pth"
-ROW_LIMIT = 2 # Maximum number of games, None for entire file # 2500 took an hour, 5000 took 2 hours
+TRAIN_FILENAMES = ["2023-10", "2023-12", "2024-02","2024-03",]
+EVAL_FILENAMES = ["2023-11"]
+TEST_FILENAMES = ["2024-01"]
+WEIGHT_FILEPATH = "weights/job_471557/model_weights9.pth" # best so far "weights/job_471557/model_weights9.pth"
+ROW_LIMIT = 1250 # Maximum number of games, None for entire file # 2500 took an hour, 5000 took 2 hours
 
 # Hyperparameters ~35 moves per game 
 BATCH_SIZE = 64 # The batch size in moves, 350 kinda worked
 SHUFFLE_DATA = True
 NUM_EPOCHS = 10
-LEARNING_RATE = 0.00001 # 0.0001 kinda worked with batch size 350
+LEARNING_RATE = 5e-6 # 1e-5 best
 OUT_CHANNELS = 64
 
 KERNAL_SIZE = 3
@@ -63,20 +64,25 @@ class Model(nn.Module):
         x = torch.selu(self.fc3(x))
         return x
 
-def train(dataset, job_id):
+def train(train_files, eval_files, job_id):
+    print("=== TRAINING MODE ===")
     # Data initialization
-    train_data = dataset
+    print("=== Loading Training and Evaluating Datasets ===")
+    train_data = ChessDataset(train_files, ROW_LIMIT)
+    eval_data = ChessDataset(eval_files, ROW_LIMIT)
     train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=SHUFFLE_DATA)
+    eval_loader = DataLoader(eval_data, batch_size=1, shuffle=False)
 
+    print("=== Starting Model ===")
     # Model initialization
     model = Model()
     model.cuda()
     loss_function = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9) # SGD instead of ADAM
+    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9) #0.9 gave us 1% best
 
     # Training
+    print(f"Started training at {round(timeSinceStart(),2)}")
     for epoch in range(NUM_EPOCHS):
-        print(f"Started epoch {epoch+1} at time {timeSinceStart()}")
         model.train()
         for x, metadata, y in train_loader:
             x, metadata, y = x.cuda(), metadata.cuda(), y.cuda()
@@ -85,73 +91,77 @@ def train(dataset, job_id):
             loss = loss_function(predictions, y)
             loss.backward()
             optimizer.step()
-            
+        #Save model state
         torch.save(model.state_dict(), f'./weights/job_{job_id}/model_weights{epoch}.pth')
-    
+        # validation after epoch  
+        correct, moves = evaluate(model, eval_loader, True)
+        print(f'Ended training epoch {epoch+1} at {round(timeSinceStart(),2)} with accuracy: {correct}/{moves} = {round(correct/moves,7)}')
+            
     print("Finished training at time", timeSinceStart())
+    testMode(TEST_FILENAMES, model, True)
 
-def trainMode(job_id):
-    print(f'Starting batch job: {job_id}')
-    print("===Creating Dataset===")
-    train_data = ChessDataset(TRAIN_FILENAMES, ROW_LIMIT)
-    print("===Beginning Training===")
-    train(train_data, job_id)
-
-def evalMode(job_id):
-    print("===Loading Eval Set===")
+def testMode(test_files, curr_model, cuda_enabled):
+    print("=== TEST MODE ===")
+    print("=== Loading Test Set ===")
     # for now, we are only loading 1 games worth, and with a batch size of 1
-    eval_data = ChessDataset(EVAL_FILENAMES, 100)
-    eval_loader = DataLoader(eval_data, batch_size=1, shuffle=False)
-    print("===Loading Trained Model===")
-    loaded_model = Model()
-    loaded_model.load_state_dict(torch.load(WEIGHT_FILEPATH, map_location=torch.device('cpu')))
-    loaded_model.eval() # disables training mode. 
-    print("===Making Predicitons===")
-    move_counter = 0
-    correct_counter = 0
-    for x, metadata, y in eval_loader:
-        pred = loaded_model(x, metadata)
-        predicted_move = selectMove(pred)
-        y_eval = y.view(2,8,8).numpy()
-        if np.array_equal(predicted_move,y_eval):
-            correct_counter +=1
-        move_counter +=1
-    
-    print(f'Final Accuracy: {correct_counter}/{move_counter} = {correct_counter/move_counter}')
+    test_data = ChessDataset(test_files, ROW_LIMIT)
+    test_loader = DataLoader(test_data, batch_size=1, shuffle=False)
+    # if we already have a model, do not load one from memory
+    if curr_model:
+        model = curr_model
+    else:
+        print("=== Loading Trained Model ===")
+        model = Model()
+        if cuda_enabled:
+            model.load_state_dict(torch.load(WEIGHT_FILEPATH))
+        else:
+            model.load_state_dict(torch.load(WEIGHT_FILEPATH, map_location=torch.device('cpu')))
+    print("=== Making Predicitons ===")
+    correct, moves = evaluate(model, test_loader, cuda_enabled)
+    print(f'Final Accuracy: {correct}/{moves} = {round(correct/moves)}')
+
+def evaluate(model, dataset_loader, cuda_enabled):
+    move_counter, correct_counter = 0, 0
+    model.eval() # disables training mode. 
+    with torch.no_grad():
+        for x, metadata, y in dataset_loader:
+            if cuda_enabled:
+                x, metadata, y = x.cuda(), metadata.cuda(), y.cuda()
+            pred = model(x, metadata)
+            predicted_move = selectMove(pred)
+            if cuda_enabled:
+                predicted_move = predicted_move.cuda()
+            # print("Pred vs predicted_move")
+            # print(pred.view(2,8,8))
+            # print(predicted_move.view(2,8,8))
+            # print("Prediction - Answer")
+            # diff = predicted_move - y
+            # print(diff.view(2,8,8))
+            if torch.equal(predicted_move,y):
+                correct_counter +=1
+            move_counter +=1
+    return correct_counter, move_counter
     
 def selectMove(prediction):
     # select largest from both layers
     # set everything to 0 but those two vals
     # Expects a model forward result in the form of a [1,126]
-    np_pred = prediction.detach().numpy()
-    # print(np_pred)
-    # print(np_pred.shape)
-    # print(np_pred[0,:63])
-    # print(np_pred[0,64:])
 
-    from_val = np.argmax(np_pred[0,:63])
-    to_val = np.argmax(np_pred[0,64:])
-    # print(f'from_val: {from_val} to_val: {to_val}')
+    from_val = torch.argmax(prediction[0,:63])
+    to_val = torch.argmax(prediction[0,64:])
 
-    pred_move = np.zeros((2,8,8))
-    pred_move[0,from_val//8, from_val % 8] = 1
-    pred_move[1,to_val//8, to_val % 8] = 1
-    # print(pred_move)
+    pred_move = torch.zeros((1,128))
+    pred_move[0, from_val] = 1
+    pred_move[0, to_val + 64] = 1
     return pred_move
 
 
 if(__name__ == "__main__"):
     args = sys.argv
-    print(f'arguments: {args}')
     # first is name of file, second is job_id, third is mode (true = train)
-
-    if len(args) == 3:
-        if args[2] == 'False':
-            evalMode(args[1])
-        else:
-            trainMode(args[1])
+    print(f'Starting batch job: {args[1]}')
+    if len(args) > 2 and args[2] == 'False':
+            testMode(TEST_FILENAMES, None, False)
     else:
-        trainMode(args[1])
-
-
+        train(TRAIN_FILENAMES, EVAL_FILENAMES, args[1])
     

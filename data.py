@@ -28,9 +28,11 @@ class ChessDataset(Dataset):
         for file in self.filenames:
             print(f'Loading from {file[19:]}')
             game_df = pd.read_csv(file, nrows=self.row_limit) # dataframe
+            percent_thresh = 0.24
             for index, game in game_df.iterrows():
-                if index % 200 == 0:
-                    print(f'{index} games loaded!')
+                if index / self.row_limit > percent_thresh:
+                    percent_thresh += .25
+                    print(f'{(index / self.row_limit)*100}% of games loaded!')
                 [x, metadata, y] = parse_game(game)
                 x_list.append(x)
                 metadata_list.append(metadata)
