@@ -84,7 +84,7 @@ def parse_game(game):
                                    (move["castling_right"] & chess.BB_A8) >> 54, (move["castling_right"] & chess.BB_H8) >> 60 ] 
             metadata = [move["clk"], move["player_to_move"]] + new_castling_rights
             metadata_tensor.append(metadata) 
-        except SyntaxError as e:
+        except SyntaxError:
             print("Syntax error while parsing game", e)
 
     x_tensor = torch.tensor(np.array(x_tensor)).float()
@@ -154,7 +154,7 @@ def printMove(move):
 def selectMove(prediction):
     # select largest from both layers
     # set everything to 0 but those two vals
-    # Expects a model forward result in the form of a [1,126]
+    # Expects a model forward result in the form of a [1,128]
 
     from_val = torch.argmax(prediction[0,:64])
     to_val = torch.argmax(prediction[0,64:])
@@ -176,7 +176,7 @@ def tensor_to_fen(x_tensor):
                 elif piece == -1:
                     cur_board[j,k] = chess.PIECE_SYMBOLS[i+1]
     # we now have an 8x8 board  
-    print(cur_board)
+    # print(cur_board)
     fen_string = ''
     empty_count = 0
 
@@ -199,12 +199,12 @@ def tensor_to_fen(x_tensor):
         if rank > 0:
             fen_string += '/'
 
-    print(fen_string)
+    # print(fen_string)
     return fen_string
 
 
 def find_legal_move(x_tensor, metadata_tensor, prediction):
-    # takes an X-by-126 and X-by-6 from the model and outputs a X-by-126 with only two squares selected per layer (a from square and a to square)
+    # takes an X-by-128 and X-by-6 from the model and outputs a X-by-128 with only two squares selected per layer (a from square and a to square)
     # the move it selects will be a legal move in the given position
 
     # translate tensor into FEN, 
@@ -235,16 +235,39 @@ def find_legal_move(x_tensor, metadata_tensor, prediction):
         cur_fen += ' -'
         cur_fen += ' 0 1'
         cur_board = chess.Board(cur_fen)
-        print('cur_board object')
-        print(cur_board)
-        print('cur_board legal_moves')
-        print(cur_board.legal_moves)
+        # print('cur_board object')
+        # print(cur_board)
+        # print('cur_board legal_moves')
+        # print(cur_board.legal_moves)
+        pred_2 = prediction.view(2, 8, 8)
+        flattened_from = prediction[:64].flatten()
+        flattened_to = pred_2[1].flatten()
+        # print(flattened_to)
+
+        seen_from = []
+        seen_to = []
+        seen_moves = []
         for move in cur_board.legal_moves:
-            print(move)
-            print(type(move))
-            # OTHER LOGIC GOES HERE!
-        
-        exit()
+            #print(flattened_from[move.from_square])
+            seen_from.append(flattened_from[move.from_square])
+
+        from_square= torch.argmax(torch.tensor(seen_from))
+        legal_from = list(cur_board.legal_moves)[from_square].from_square
+        for move in cur_board.legal_moves:
+            if move.from_square == legal_from:
+                seen_moves.append(move)
+                # print(flattened_to[move.to_square])
+                seen_to.append(flattened_to[move.to_square])
+
+        legal_to = torch.argmax(torch.tensor(seen_to))
+        legal_move = seen_moves[legal_to]
+
+        actual_pred = torch.zeros((1,128)) 
+        actual_pred[0, legal_move.from_square] = 1
+        actual_pred[0, legal_move.to_square + 64] = 1
+        # print(pred_2)
+        # print(actual_pred.view(2,8,8))
+        return actual_pred
 if(__name__ == "__main__"):
     args = sys.argv
     test_data = ChessDataset(["2024-01"], 1)

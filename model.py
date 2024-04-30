@@ -5,7 +5,7 @@ import numpy as np
 import sys
 import time
 import pandas as pd
-from data import ChessDataset, printMove, selectMove
+from data import ChessDataset, printMove, selectMove, find_legal_move
 from torch.utils.data import DataLoader, Dataset
 """TODO: 
     Legality checking / reporting
@@ -17,8 +17,8 @@ from torch.utils.data import DataLoader, Dataset
 TRAIN_FILENAMES = ["2023-10", "2023-12", "2024-02","2024-03"]
 EVAL_FILENAMES = ["2023-11"]
 TEST_FILENAMES = ["2024-01"]
-WEIGHT_FILEPATH = "weights/job_472107/model_weights19.pth" # best so far "weights/job_471557/model_weights9.pth"
-ROW_LIMIT = 10000 
+WEIGHT_FILEPATH = "weights/job_472405/model_weights42.pth" # best so far "weights/job_471557/model_weights9.pth"
+ROW_LIMIT = 5 
 DEBUG_FLAG = False
 
 # Hyperparameters ~35 moves per game 
@@ -26,7 +26,7 @@ BATCH_SIZE = 64 # The batch size in moves, 350 kinda worked
 SHUFFLE_DATA = True
 NUM_EPOCHS = 50
 LEARNING_RATE = 1e-2 # 5e-4 == 2.5% 7.5e-4 2.3% one run at 8e-4 second run at 1e-2
-MOMENTUM = 0.95
+MOMENTUM = 0.9 # .95 might b to high?
 OUT_CHANNELS = 64
 
 KERNAL_SIZE = 3
@@ -137,7 +137,8 @@ def evaluate(model, dataset_loader, cuda_enabled):
             if cuda_enabled:
                 x, metadata, y = x.cuda(), metadata.cuda(), y.cuda()
             pred = model(x, metadata)
-            predicted_move = selectMove(pred)
+            print(f'curr time {timeSinceStart()}')
+            predicted_move = find_legal_move(x, metadata, pred)
             if cuda_enabled:
                 predicted_move = predicted_move.cuda()
             if DEBUG_FLAG:
