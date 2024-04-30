@@ -7,6 +7,12 @@ import time
 import pandas as pd
 from data import ChessDataset, printMove, selectMove, find_legal_move
 from torch.utils.data import DataLoader, Dataset
+
+# different loss func (easy)
+    # mean squared?
+# split end layers and retrain? (hard)
+#   
+
 """TODO: 
     Legality checking / reporting
         arg_max (legal) from layer
@@ -17,14 +23,14 @@ from torch.utils.data import DataLoader, Dataset
 TRAIN_FILENAMES = ["2023-10", "2023-12", "2024-02","2024-03"]
 EVAL_FILENAMES = ["2023-11"]
 TEST_FILENAMES = ["2024-01"]
-WEIGHT_FILEPATH = "weights/job_472405/model_weights42.pth" # best so far "weights/job_471557/model_weights9.pth"
-ROW_LIMIT = 5 
+WEIGHT_FILEPATH = "weights/job_472405/model_weights12.pth" # best so far "weights/job_471557/model_weights9.pth"
+ROW_LIMIT = 100 
 DEBUG_FLAG = False
 
 # Hyperparameters ~35 moves per game 
 BATCH_SIZE = 64 # The batch size in moves, 350 kinda worked
 SHUFFLE_DATA = True
-NUM_EPOCHS = 50
+NUM_EPOCHS = 15
 LEARNING_RATE = 1e-2 # 5e-4 == 2.5% 7.5e-4 2.3% one run at 8e-4 second run at 1e-2
 MOMENTUM = 0.9 # .95 might b to high?
 OUT_CHANNELS = 64
@@ -45,7 +51,8 @@ class Model(nn.Module):
         self.conv3 = nn.Conv2d(OUT_CHANNELS, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING)
         self.fc1 = nn.Linear(OUT_CHANNELS * 8 * 8 + 6, OUT_CHANNELS * 8 * 8) # 5002, 4096
         self.fc2 = nn.Linear(OUT_CHANNELS * 8 * 8, OUT_CHANNELS * 8 * 8)
-        self.fc3 = nn.Linear(OUT_CHANNELS * 8 * 8, 128)
+        self.fc3_1 = nn.Linear(OUT_CHANNELS * 8 * 8, 64)
+        self.fc3_2 = nn.Linear(OUT_CHANNELS * 8 * 8, 64) 
 
     def forward(self, x, metadata):
         # print(x.shape)
@@ -62,14 +69,12 @@ class Model(nn.Module):
 
         x = torch.selu(self.fc1(x))
         x = torch.selu(self.fc2(x))
-        x = torch.selu(self.fc3(x))
 
-        # x = torch.sigmoid(x)
+        x_1 = self.fc3_1(x)
+        x_2 = self.fc3_2(x)
+
         # code using softmax
-        x1 = torch.nn.functional.softmax(x[:, :64], dim=1)
-        x2 = torch.nn.functional.softmax(x[:, 64:], dim=1)
-        x = torch.cat((x1,x2), dim=1)
-        return x
+        return x_1, x_2
 
 def train(train_files, eval_files, job_id):
     print("=== TRAINING MODE ===")
@@ -84,7 +89,8 @@ def train(train_files, eval_files, job_id):
     # Model initialization
     model = Model()
     model.cuda()
-    loss_function = nn.CrossEntropyLoss()
+    from_loss_function = nn.BCEWithLogitsLoss()
+    to_loss_function = nn.BCEWithLogitsLoss()
     optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=MOMENTUM) #0.9 gave us 1% best
 
     # Training
@@ -92,13 +98,15 @@ def train(train_files, eval_files, job_id):
     for epoch in range(NUM_EPOCHS):
         model.train()
         epoch_loss = 0
-        for x, metadata, y in train_loader:
-            x, metadata, y = x.cuda(), metadata.cuda(), y.cuda()
+        for x, metadata, y_from, y_to in train_loader:
+            x, metadata, y_from, y_to = x.cuda(), metadata.cuda(), y_from.cuda(), y_to.cuda()
             optimizer.zero_grad()
-            predictions = model(x, metadata)
-            loss = loss_function(predictions, y)
-            epoch_loss += loss.item()
-            loss.backward()
+            from_pred, to_pred = model(x, metadata)
+            from_loss = from_loss_function(from_pred, y_from)
+            to_loss = to_loss_function(to_pred, y_to)
+            sum_loss = from_loss + to_loss 
+            sum_loss.backward()
+            epoch_loss += sum_loss.item()
             optimizer.step()
         #Save model state
         torch.save(model.state_dict(), f'./weights/job_{job_id}/model_weights{epoch}.pth')
@@ -133,23 +141,36 @@ def evaluate(model, dataset_loader, cuda_enabled):
     move_counter, correct_counter = 0, 0
     model.eval() # disables training mode. 
     with torch.no_grad():
-        for x, metadata, y in dataset_loader:
+        for x, metadata, y_from, y_to in dataset_loader:
             if cuda_enabled:
-                x, metadata, y = x.cuda(), metadata.cuda(), y.cuda()
-            pred = model(x, metadata)
-            print(f'curr time {timeSinceStart()}')
-            predicted_move = find_legal_move(x, metadata, pred)
+                x, metadata, y_from, y_to = x.cuda(), metadata.cuda(), y_from.cuda(), y_to.cuda()
+            pred_from, pred_to = model(x, metadata)
+            # print(f'curr time {timeSinceStart()}')
+            actual_from_pred, actual_to_pred, __ = find_legal_move(x, metadata, pred_from, pred_to)
             if cuda_enabled:
-                predicted_move = predicted_move.cuda()
+                actual_from_pred, actual_to_pred =  actual_from_pred.cuda(), actual_to_pred.cuda()
             if DEBUG_FLAG:
-                print(torch.round(pred, decimals=3).view(2,8,8))
-                print(predicted_move.view(2,8,8))
+                # print(torch.round(pred, decimals=3).view(2,8,8))
+                # print(predicted_move.view(2,8,8))
+                print(f'afp shape {actual_from_pred.shape}, yearly shape {y_from.shape}, afp shape {actual_to_pred.shape}, yearly shape {y_to.shape}')
+                print(f'pred_from')
+                print(pred_from.view(1,8,8))
+                print(f'pred_to')
+                print(pred_to.view(1,8,8))
+                print(f'afp')
+                print(actual_from_pred.view(1,8,8))
+                print(f'from_answer')
+                print(y_from.view(1,8,8))
+                print(f'actual_to')
+                print(actual_to_pred.view(1,8,8))
+                print(f'to_answer')
+                print(y_to.view(1,8,8))
                 exit()
-            if torch.equal(predicted_move,y):
+
+            if torch.equal(actual_from_pred,y_from) and torch.equal(actual_to_pred,y_to):
                 correct_counter +=1
             move_counter +=1
     return correct_counter, move_counter
-
 
 if(__name__ == "__main__"):
     args = sys.argv

@@ -23,7 +23,8 @@ class ChessDataset(Dataset):
         print("=== LOADING GAMES! ===")
         x_list = []
         metadata_list = []
-        y_list = []
+        y_from_list = []
+        y_to_list = []
         # take every game, extract moves into a GIANT list, 
         for file in self.filenames:
             print(f'Loading from {file[19:]}')
@@ -33,27 +34,31 @@ class ChessDataset(Dataset):
                 if index / self.row_limit > percent_thresh:
                     print(f'{percent_thresh*100}% of games loaded!')
                     percent_thresh += .25
-                [x, metadata, y] = parse_game(game)
+                [x, metadata, y_from, y_to] = parse_game(game)
                 x_list.append(x)
                 metadata_list.append(metadata)
-                y_list.append(y)
+                
+                y_from_list.append(y_from)
+                y_to_list.append(y_to)
             print(f'100.0% of games loaded')
         x_list = torch.cat(x_list, dim=0)
         metadata_list = torch.cat(metadata_list, dim=0)
-        y_list = torch.cat(y_list, dim=0)
-        return [x_list, metadata_list, y_list]
+        y_from_list = torch.cat(y_from_list, dim=0)
+        y_to_list = torch.cat(y_to_list, dim=0)
+        return [x_list, metadata_list, y_from_list, y_to_list]
 
     def __len__(self):
         return len(self.data_list[0])
 
     def __getitem__(self, index):
-        return self.data_list[0][index], self.data_list[1][index], self.data_list[2][index]
+        return self.data_list[0][index], self.data_list[1][index], self.data_list[2][index], self.data_list[3][index]
 
 def parse_game(game):
 
     game = game["moves"]
     x_tensor = []
-    y_tensor = []
+    y_from_tensor = []
+    y_to_tensor = []
     metadata_tensor = []
 
     moves = game.split("}, {")
@@ -73,7 +78,8 @@ def parse_game(game):
             y = move_to_tensor(move["move"])
             y = y.reshape(128)
             x_tensor.append(x)
-            y_tensor.append(y)
+            y_from_tensor.append(y[:64])
+            y_to_tensor.append(y[64:])
             """
             0th bit -- A1 white queenside 
             7th bit -- H1 white kingside
@@ -84,14 +90,15 @@ def parse_game(game):
                                    (move["castling_right"] & chess.BB_A8) >> 54, (move["castling_right"] & chess.BB_H8) >> 60 ] 
             metadata = [move["clk"], move["player_to_move"]] + new_castling_rights
             metadata_tensor.append(metadata) 
-        except SyntaxError:
+        except SyntaxError as e:
             print("Syntax error while parsing game", e)
 
     x_tensor = torch.tensor(np.array(x_tensor)).float()
-    y_tensor = torch.tensor(np.array(y_tensor)).float()
+    y_from_tensor = torch.tensor(np.array(y_from_tensor)).float()
+    y_to_tensor = torch.tensor(np.array(y_to_tensor)).float()
     metadata_tensor = torch.tensor(np.array(metadata_tensor)).float()
 
-    return x_tensor, metadata_tensor, y_tensor        
+    return x_tensor, metadata_tensor, y_from_tensor, y_to_tensor        
     
 # Converts a move string such as "e2e4" into the appropriate tensor
 def move_to_tensor(move_str):
@@ -203,7 +210,7 @@ def tensor_to_fen(x_tensor):
     return fen_string
 
 
-def find_legal_move(x_tensor, metadata_tensor, prediction):
+def find_legal_move(x_tensor, metadata_tensor, from_pred, to_pred):
     # takes an X-by-128 and X-by-6 from the model and outputs a X-by-128 with only two squares selected per layer (a from square and a to square)
     # the move it selects will be a legal move in the given position
 
@@ -239,17 +246,17 @@ def find_legal_move(x_tensor, metadata_tensor, prediction):
         # print(cur_board)
         # print('cur_board legal_moves')
         # print(cur_board.legal_moves)
-        pred_2 = prediction.view(2, 8, 8)
-        flattened_from = prediction[:64].flatten()
-        flattened_to = pred_2[1].flatten()
+        # pred_2 = prediction.view(2, 8, 8)
+        # flattened_to = pred_2[1].flatten()
         # print(flattened_to)
-
+        # print(from_pred.shape)
+        # print(to_pred.shape)
         seen_from = []
         seen_to = []
         seen_moves = []
         for move in cur_board.legal_moves:
             #print(flattened_from[move.from_square])
-            seen_from.append(flattened_from[move.from_square])
+            seen_from.append(from_pred[0, move.from_square])
 
         from_square= torch.argmax(torch.tensor(seen_from))
         legal_from = list(cur_board.legal_moves)[from_square].from_square
@@ -257,17 +264,16 @@ def find_legal_move(x_tensor, metadata_tensor, prediction):
             if move.from_square == legal_from:
                 seen_moves.append(move)
                 # print(flattened_to[move.to_square])
-                seen_to.append(flattened_to[move.to_square])
+                seen_to.append(to_pred[0, move.to_square])
 
         legal_to = torch.argmax(torch.tensor(seen_to))
         legal_move = seen_moves[legal_to]
 
-        actual_pred = torch.zeros((1,128)) 
-        actual_pred[0, legal_move.from_square] = 1
-        actual_pred[0, legal_move.to_square + 64] = 1
-        # print(pred_2)
-        # print(actual_pred.view(2,8,8))
-        return actual_pred
+        from_pred_actual = torch.zeros((1,64)) 
+        to_pred_actual = torch.zeros((1,64)) 
+        from_pred_actual[0, legal_move.from_square] = 1
+        to_pred_actual[0, legal_move.to_square] = 1
+        return from_pred_actual, to_pred_actual, legal_move
 if(__name__ == "__main__"):
     args = sys.argv
     test_data = ChessDataset(["2024-01"], 1)
