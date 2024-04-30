@@ -24,20 +24,34 @@ TRAIN_FILENAMES = ["2023-10", "2023-12", "2024-02","2024-03"]
 EVAL_FILENAMES = ["2023-11"]
 TEST_FILENAMES = ["2024-01"]
 WEIGHT_FILEPATH = "weights/job_472405/model_weights12.pth" # best so far "weights/job_471557/model_weights9.pth"
-ROW_LIMIT = 100 
+ROW_LIMIT = 5000 
 DEBUG_FLAG = False
 
 # Hyperparameters ~35 moves per game 
 BATCH_SIZE = 64 # The batch size in moves, 350 kinda worked
 SHUFFLE_DATA = True
-NUM_EPOCHS = 15
-LEARNING_RATE = 1e-2 # 5e-4 == 2.5% 7.5e-4 2.3% one run at 8e-4 second run at 1e-2
-MOMENTUM = 0.9 # .95 might b to high?
+NUM_EPOCHS = 50
+LEARNING_RATE = 1e-5
+MOMENTUM = 0.9
 OUT_CHANNELS = 64
-
 KERNAL_SIZE = 3
 PADDING = 1
 
+# FIRST LARGE 
+    # lr 1e-1
+    # EVAL EVERY 3 epochs
+# SECOND LARGE
+    # lr 1e-2
+    # EVAL EVERY 3 epochs
+# THIRD LARGE
+    # lr 1e-3
+    # EVAL EVERY 3 epochs
+# FOURTH LARGE
+    # lr 1e-4
+    # EVAL EVERY 3 epochs
+# FIFTH LARGE 
+    # lr 1e-5
+    # EVAL EVERY 3 epochs 
 START_TIME = time.time()
 
 def timeSinceStart():
@@ -51,8 +65,12 @@ class Model(nn.Module):
         self.conv3 = nn.Conv2d(OUT_CHANNELS, OUT_CHANNELS, KERNAL_SIZE, padding=PADDING)
         self.fc1 = nn.Linear(OUT_CHANNELS * 8 * 8 + 6, OUT_CHANNELS * 8 * 8) # 5002, 4096
         self.fc2 = nn.Linear(OUT_CHANNELS * 8 * 8, OUT_CHANNELS * 8 * 8)
-        self.fc3_1 = nn.Linear(OUT_CHANNELS * 8 * 8, 64)
-        self.fc3_2 = nn.Linear(OUT_CHANNELS * 8 * 8, 64) 
+
+        self.fc3_1_1 = nn.Linear(OUT_CHANNELS * 8 * 8, OUT_CHANNELS * 8 * 8)
+        self.fc3_1_2 = nn.Linear(OUT_CHANNELS * 8 * 8, 64)
+
+        self.fc3_2_1 = nn.Linear(OUT_CHANNELS * 8 * 8, OUT_CHANNELS * 8 * 8)
+        self.fc3_2_2 = nn.Linear(OUT_CHANNELS * 8 * 8, 64) 
 
     def forward(self, x, metadata):
         # print(x.shape)
@@ -70,8 +88,11 @@ class Model(nn.Module):
         x = torch.selu(self.fc1(x))
         x = torch.selu(self.fc2(x))
 
-        x_1 = self.fc3_1(x)
-        x_2 = self.fc3_2(x)
+        x_1 = torch.selu(self.fc3_1_1(x))
+        x_1 = self.fc3_1_2(x_1)
+
+        x_2 = torch.selu(self.fc3_2_1(x))
+        x_2 = self.fc3_2_2(x_2)
 
         # code using softmax
         return x_1, x_2
@@ -110,9 +131,10 @@ def train(train_files, eval_files, job_id):
             optimizer.step()
         #Save model state
         torch.save(model.state_dict(), f'./weights/job_{job_id}/model_weights{epoch}.pth')
-        # validation after epoch  
-        correct, moves = evaluate(model, eval_loader, True)
-        print(f'[Epoch {epoch+1}, Time {round(timeSinceStart(),2)}] acc: {correct}/{moves} ({round(correct/moves,5)}) and loss {round(epoch_loss,2)}')
+        # validation after epoch
+        if epoch % 3 == 0: 
+            correct, moves = evaluate(model, eval_loader, True)
+            print(f'[Epoch {epoch+1}, Time {round(timeSinceStart(),2)}] acc: {correct}/{moves} ({round(correct/moves,5)}) and loss {round(epoch_loss,2)}')
             
     print("Finished training at time", timeSinceStart())
     testMode(TEST_FILENAMES, model, True)

@@ -242,20 +242,11 @@ def find_legal_move(x_tensor, metadata_tensor, from_pred, to_pred):
         cur_fen += ' -'
         cur_fen += ' 0 1'
         cur_board = chess.Board(cur_fen)
-        # print('cur_board object')
-        # print(cur_board)
-        # print('cur_board legal_moves')
-        # print(cur_board.legal_moves)
-        # pred_2 = prediction.view(2, 8, 8)
-        # flattened_to = pred_2[1].flatten()
-        # print(flattened_to)
-        # print(from_pred.shape)
-        # print(to_pred.shape)
+
         seen_from = []
         seen_to = []
         seen_moves = []
         for move in cur_board.legal_moves:
-            #print(flattened_from[move.from_square])
             seen_from.append(from_pred[0, move.from_square])
 
         from_square= torch.argmax(torch.tensor(seen_from))
@@ -263,7 +254,6 @@ def find_legal_move(x_tensor, metadata_tensor, from_pred, to_pred):
         for move in cur_board.legal_moves:
             if move.from_square == legal_from:
                 seen_moves.append(move)
-                # print(flattened_to[move.to_square])
                 seen_to.append(to_pred[0, move.to_square])
 
         legal_to = torch.argmax(torch.tensor(seen_to))
