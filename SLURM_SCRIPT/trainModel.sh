@@ -2,7 +2,7 @@
 #SBATCH -N 1
 #SBATCH -n 24
 #SBATCH --mem=128g
-#SBATCH -J "Training Time - 1e-5"
+#SBATCH -J "Training Time"
 #SBATCH -p academic
 #SBATCH -t 24:00:00
 #SBATCH --gres=gpu:1

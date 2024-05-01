@@ -17,8 +17,6 @@ class ChessDataset(Dataset):
             self.filenames.append("parsed/parsed_data_" + fn + ".csv") 
         self.data_list = self.load_game_data()
 
-    # TODO: add flavor for timing progress etc
-    # tentative add multithreading for parsing...?
     def load_game_data(self):
         print("=== LOADING GAMES! ===")
         x_list = []
@@ -158,6 +156,8 @@ def printMove(move):
             print(move[i, :, :])
             print('')
 
+# DEPRICATED METHOD
+# use to primatively select move from tensors by using arg max on each layer
 def selectMove(prediction):
     # select largest from both layers
     # set everything to 0 but those two vals
@@ -182,8 +182,6 @@ def tensor_to_fen(x_tensor):
                     cur_board[j,k] = chess.PIECE_SYMBOLS[i+1].upper()
                 elif piece == -1:
                     cur_board[j,k] = chess.PIECE_SYMBOLS[i+1]
-    # we now have an 8x8 board  
-    # print(cur_board)
     fen_string = ''
     empty_count = 0
 
@@ -206,7 +204,6 @@ def tensor_to_fen(x_tensor):
         if rank > 0:
             fen_string += '/'
 
-    # print(fen_string)
     return fen_string
 
 
@@ -264,6 +261,7 @@ def find_legal_move(x_tensor, metadata_tensor, from_pred, to_pred):
         from_pred_actual[0, legal_move.from_square] = 1
         to_pred_actual[0, legal_move.to_square] = 1
         return from_pred_actual, to_pred_actual, legal_move
+        
 if(__name__ == "__main__"):
     args = sys.argv
     test_data = ChessDataset(["2024-01"], 1)
