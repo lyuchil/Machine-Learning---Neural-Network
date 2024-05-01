@@ -1,5 +1,7 @@
 # Project Goatfish Readme
 
+### Riley Blair, Stephen Fanning, Yu-Chi Liang, William Ryan
+
 [Goatfish Frontend](http://goatfish.s3.us-east-2.amazonaws.com/index.html)
 [Goatfish Neural Network Repository](https://github.com/lyuchil/Machine-Learning---Neural-Network)
 [Goatfish Frontend Repository](https://github.com/lyuchil/Machine-Learning---Frontend)
