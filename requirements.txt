@@ -2,3 +2,4 @@ chess
 torch
 pandas
 numpy
+requests
